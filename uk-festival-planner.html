@@ -1,0 +1,1370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UK节日选品备货决策工具</title>
+<style>
+:root {
+  --bg: #f8fafc;
+  --bg-card: #ffffff;
+  --text: #1e293b;
+  --text-muted: #64748b;
+  --border: #e2e8f0;
+  --urgent: #ef4444;
+  --week: #f97316;
+  --month: #eab308;
+  --plan: #22c55e;
+  --past: #94a3b8;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --risk-low: #22c55e;
+  --risk-mid: #f97316;
+  --risk-high: #ef4444;
+  --max-width: 1200px;
+  --radius: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-hover: 0 4px 12px rgba(0,0,0,0.1);
+  --header-h: 57px; /* header 实际高度，由 JS 动态测量后覆盖，避免标题换行时吸顶错位 */
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Microsoft YaHei", "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+/* ① 顶部导航 */
+.header {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--bg-card); border-bottom: 1px solid var(--border); box-shadow: var(--shadow);
+}
+.header-inner {
+  max-width: var(--max-width); margin: 0 auto; padding: 12px 20px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.header-title { font-size: 18px; font-weight: 700; }
+.header-title small { font-size: 12px; color: var(--text-muted); font-weight: 400; margin-left: 8px; }
+.month-nav { display: flex; gap: 4px; flex-wrap: wrap; }
+.month-nav a {
+  padding: 4px 10px; border-radius: 4px; text-decoration: none;
+  color: var(--text-muted); font-size: 13px; transition: all 0.15s;
+}
+.month-nav a:hover { background: var(--bg); color: var(--accent); }
+
+/* ② 紧急度看板 */
+.dashboard { max-width: var(--max-width); margin: 20px auto; padding: 0 20px; }
+.dashboard-hero {
+  background: var(--bg-card); border-radius: var(--radius); padding: 20px;
+  box-shadow: var(--shadow); margin-bottom: 16px;
+}
+.countdown { font-size: 14px; color: var(--text-muted); margin-bottom: 4px; }
+.countdown strong { color: var(--text); font-size: 18px; }
+.stat-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.stat-card {
+  background: var(--bg-card); border-radius: var(--radius); padding: 14px;
+  box-shadow: var(--shadow); cursor: pointer; border-left: 4px solid var(--border); transition: all 0.15s;
+}
+.stat-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+.stat-card.urgent { border-left-color: var(--urgent); }
+.stat-card.week { border-left-color: var(--week); }
+.stat-card.month { border-left-color: var(--month); }
+.stat-card.plan { border-left-color: var(--plan); }
+.stat-card .num { font-size: 28px; font-weight: 700; }
+.stat-card .label { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.stat-card.urgent .num { color: var(--urgent); }
+.stat-card.week .num { color: var(--week); }
+.stat-card.month .num { color: var(--month); }
+.stat-card.plan .num { color: var(--plan); }
+.stat-card.active { background: #eff6ff; box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+
+/* ③ 筛选栏 */
+.filter-bar {
+  position: sticky; top: var(--header-h); z-index: 90;
+  background: var(--bg-card); border-bottom: 1px solid var(--border); box-shadow: var(--shadow);
+}
+.filter-inner {
+  max-width: var(--max-width); margin: 0 auto; padding: 10px 20px;
+  display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+}
+.filter-group { display: flex; gap: 4px; align-items: center; }
+.filter-group label { font-size: 12px; color: var(--text-muted); margin-right: 4px; }
+.filter-bar select, .filter-bar input[type="text"] {
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px;
+  font-size: 13px; background: var(--bg-card); color: var(--text);
+}
+.filter-bar input[type="text"] { min-width: 160px; }
+.filter-bar button {
+  padding: 5px 12px; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg-card); cursor: pointer; font-size: 13px;
+}
+.filter-bar button:hover { background: var(--bg); }
+
+/* ④ 主区域 */
+.main { max-width: var(--max-width); margin: 20px auto; padding: 0 20px; }
+.month-section { margin-bottom: 32px; }
+.month-section h2 {
+  font-size: 18px; margin-bottom: 12px; padding-bottom: 6px;
+  border-bottom: 2px solid var(--border); display: flex; align-items: center; gap: 8px;
+}
+.month-section h2 .count { font-size: 13px; color: var(--text-muted); font-weight: 400; }
+.cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 16px; }
+
+/* 节日卡片 */
+.festival-card {
+  background: var(--bg-card); border-radius: var(--radius); box-shadow: var(--shadow);
+  overflow: hidden; border-left: 4px solid var(--border); transition: box-shadow 0.15s;
+}
+.festival-card:hover { box-shadow: var(--shadow-hover); }
+.card-header:focus-visible, .timeline-dot:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px;
+}
+.card-header {
+  padding: 14px 16px; cursor: pointer;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+}
+.card-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; flex-wrap: wrap; }
+.card-title .icon { font-size: 22px; }
+.card-title .name-en { font-size: 12px; color: var(--text-muted); font-weight: 400; }
+.card-meta { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 12px;
+  font-size: 11px; font-weight: 600; margin-left: 4px;
+}
+.badge.urgent { background: #fef2f2; color: var(--urgent); }
+.badge.week { background: #fff7ed; color: var(--week); }
+.badge.month { background: #fefce8; color: var(--month); }
+.badge.plan { background: #f0fdf4; color: var(--plan); }
+.badge.past { background: #f1f5f9; color: var(--past); }
+.badge.importance-S { background: #fef2f2; color: var(--urgent); }
+.card-arrow { font-size: 12px; color: var(--text-muted); }
+.card-body { padding: 0 16px 16px; display: none; }
+.festival-card.expanded .card-body { display: block; }
+
+/* 时间线 */
+.timeline { background: var(--bg); border-radius: 6px; padding: 12px; margin-bottom: 12px; }
+.timeline-track { display: flex; justify-content: space-between; position: relative; margin: 10px 0 4px; }
+.timeline-track::before {
+  content: ""; position: absolute; top: 8px; left: 8px; right: 8px;
+  height: 2px; background: var(--border);
+}
+.timeline-node { position: relative; z-index: 1; text-align: center; flex: 1; }
+.timeline-dot {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--bg-card); border: 2px solid var(--border); margin: 0 auto 4px; cursor: pointer;
+}
+.timeline-dot.done { background: var(--plan); border-color: var(--plan); }
+.timeline-node .ms-name { font-size: 11px; color: var(--text); }
+.timeline-node .ms-date { font-size: 10px; color: var(--text-muted); }
+
+/* 选品表 */
+.products-section { margin-bottom: 12px; }
+.products-section h4 { font-size: 13px; margin-bottom: 8px; color: var(--text); }
+.product-cat-tabs { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+.product-cat-tab {
+  padding: 3px 10px; border-radius: 12px; font-size: 12px; cursor: pointer;
+  background: var(--bg); border: 1px solid var(--border);
+}
+.product-cat-tab.active { background: var(--accent); color: white; border-color: var(--accent); }
+.product-table-wrap { overflow-x: auto; }
+.product-table { width: 100%; font-size: 12px; border-collapse: collapse; min-width: 500px; }
+.product-table th {
+  text-align: left; padding: 6px 8px; background: var(--bg);
+  color: var(--text-muted); font-weight: 600; font-size: 11px;
+}
+.product-table td { padding: 6px 8px; border-top: 1px solid var(--border); vertical-align: top; }
+.product-table tr:hover { background: var(--bg); }
+.stars { color: #f59e0b; letter-spacing: -1px; }
+.risk { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 8px; }
+.risk-low { background: #f0fdf4; color: var(--risk-low); }
+.risk-mid { background: #fff7ed; color: var(--risk-mid); }
+.risk-high { background: #fef2f2; color: var(--risk-high); }
+
+/* 验证指引 */
+.validation-section {
+  background: #eff6ff; border-radius: 6px; padding: 10px; margin-bottom: 12px; font-size: 12px;
+}
+.validation-section h4 { font-size: 12px; margin-bottom: 6px; color: var(--accent); }
+.validation-section ul { margin-left: 16px; color: var(--text-muted); }
+.validation-section li { margin-bottom: 2px; }
+
+/* 控制区 */
+.card-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.card-controls label { font-size: 12px; color: var(--text-muted); }
+.card-controls select { padding: 4px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px; }
+.logistics-toggle { display: flex; gap: 2px; }
+.logistics-toggle button {
+  padding: 4px 10px; font-size: 11px; border: 1px solid var(--border);
+  background: var(--bg-card); cursor: pointer; border-radius: 4px;
+}
+.logistics-toggle button.active { background: var(--accent); color: white; border-color: var(--accent); }
+.notes-area {
+  width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px;
+  font-size: 12px; min-height: 40px; resize: vertical; font-family: inherit; margin-top: 6px;
+}
+
+/* ⑤ 页脚 */
+.footer {
+  max-width: var(--max-width); margin: 40px auto 20px; padding: 20px;
+  background: var(--bg-card); border-radius: var(--radius); box-shadow: var(--shadow);
+  font-size: 12px; color: var(--text-muted);
+}
+.footer h3 { font-size: 14px; color: var(--text); margin-bottom: 8px; }
+.footer p { margin-bottom: 4px; }
+.footer .disclaimer {
+  background: #fffbeb; border-left: 3px solid var(--week);
+  padding: 8px 12px; margin: 12px 0; border-radius: 4px;
+}
+.footer-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.footer-actions button {
+  padding: 6px 14px; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg-card); cursor: pointer; font-size: 13px;
+}
+.footer-actions button:hover { background: var(--bg); }
+.footer-actions button.danger { color: var(--urgent); border-color: var(--urgent); }
+.footer-actions button.danger:hover { background: #fef2f2; }
+
+/* 回到顶部 */
+.back-to-top {
+  position: fixed; bottom: 20px; right: 20px; width: 40px; height: 40px;
+  border-radius: 50%; background: var(--accent); color: white; border: none;
+  cursor: pointer; box-shadow: var(--shadow-hover); display: none; font-size: 18px; z-index: 80;
+}
+.back-to-top.show { display: block; }
+
+.empty-state { text-align: center; padding: 40px; color: var(--text-muted); }
+.hidden { display: none !important; }
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .stat-cards { grid-template-columns: repeat(2, 1fr); }
+  .cards-grid { grid-template-columns: 1fr; }
+  .header-inner { flex-direction: column; align-items: flex-start; }
+  .filter-bar { top: auto; position: relative; }
+  .filter-inner { padding: 10px 12px; gap: 8px; }
+  .filter-bar input[type="text"] { min-width: 120px; }
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <div class="header-title">
+      🇬🇧 UK节日选品备货决策工具
+      <small>2026年7月 - 12月</small>
+    </div>
+    <nav class="month-nav" id="monthNav"></nav>
+  </div>
+</header>
+
+<section class="dashboard">
+  <div class="dashboard-hero">
+    <div class="countdown" id="countdown"></div>
+  </div>
+  <div class="stat-cards" id="statCards"></div>
+</section>
+
+<div class="filter-bar">
+  <div class="filter-inner">
+    <div class="filter-group">
+      <label>品类</label>
+      <select id="filterCategory">
+        <option value="">全部</option>
+        <option value="decor">🎃装饰</option>
+        <option value="gift">🎁礼品</option>
+        <option value="apparel">👕服饰</option>
+        <option value="home">🏠家居</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>月份</label>
+      <select id="filterMonth">
+        <option value="">全部</option>
+        <option value="7">7月</option>
+        <option value="8">8月</option>
+        <option value="9">9月</option>
+        <option value="10">10月</option>
+        <option value="11">11月</option>
+        <option value="12">12月</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>紧急度</label>
+      <select id="filterUrgency">
+        <option value="">全部</option>
+        <option value="urgent">🔴紧急</option>
+        <option value="week">🟠本周</option>
+        <option value="month">🟡本月</option>
+        <option value="plan">🟢规划</option>
+        <option value="past">⚫已过</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>状态</label>
+      <select id="filterStatus">
+        <option value="">全部</option>
+        <option value="none">未启动</option>
+        <option value="selection">选品中</option>
+        <option value="ordered">已下单</option>
+        <option value="arrived">已到仓</option>
+        <option value="listed">已上架</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <input type="text" id="filterSearch" placeholder="🔍 搜索节日/SKU/关键词">
+    </div>
+    <div class="filter-group">
+      <button id="resetFilter">重置</button>
+    </div>
+  </div>
+</div>
+
+<main class="main" id="main"></main>
+
+<footer class="footer">
+  <h3>📌 使用说明</h3>
+  <p>• 点击节日卡片标题展开详情；点击时间线圆点勾选里程碑进度。</p>
+  <p>• 切换物流方式（海运/卡航/空运）会重算该节日的时间线和紧急度。</p>
+  <p>• 所有进度自动保存在浏览器本地（localStorage），建议定期导出备份。</p>
+  <div class="disclaimer">
+    <strong>⚠️ 数据免责声明：</strong>本工具的SKU建议、售价区间、毛利率为基于行业经验的参考值，非实时销量数据。请通过 Google Trends、亚马逊BSR、Keepa 等工具验证后再决策。拿货成本以1688实际询价为准。
+  </div>
+  <div class="footer-actions">
+    <button onclick="exportData()">📤 导出备份</button>
+    <button onclick="document.getElementById('importFile').click()">📥 导入恢复</button>
+    <input type="file" id="importFile" accept=".json" class="hidden" onchange="importData(event)">
+    <button class="danger" onclick="resetAllProgress()">🗑 清除所有进度</button>
+  </div>
+</footer>
+
+<button class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+
+<script>
+// ============================================
+// CONFIG：全局常量配置
+// ============================================
+const CONFIG = {
+  // transit=纯运输到FBA仓库；production=下单到出厂（固定3天）；leadTime=production+transit
+  // arrivalBuffer=到仓后入仓2天+缓冲12天=14天（到仓到节日最小间隔）
+  logisticsModes: {
+    air:   { leadTime: 16, production: 3,  transit: 13, label: "空运" },
+    truck: { leadTime: 33, production: 3, transit: 30, label: "卡航/快铁" },
+    sea:   { leadTime: 63, production: 3, transit: 60, label: "海运" }
+  },
+  arrivalBuffer: 14, // 入仓2天 + 缓冲12天（到仓→节日）
+  defaultLogistics: "truck",
+  // 双段物流里程碑：daysBefore = 节日前X天（正数）
+  // daysBeforeSource 引用物流方式属性 + 固定偏移；airArrival首批固定走空运
+  milestones: [
+    { id: "selection",  daysBeforeSource: "leadTime+14", name: "选品+下单",    actions: "定SKU；同时下空运首批50件+大货订单（出厂{production}天）" },
+    { id: "airArrival", daysBeforeSource: "leadTime+1",  name: "空运首批到仓", actions: "空运13天到仓，开始测款观察" },
+    { id: "truckShip",  daysBeforeSource: "transit+14",  name: "大货发运",      actions: "大货出厂发UK（{modeLabel}约{transit}天到FBA）" },
+    { id: "arrival",    daysBefore: 14,                  name: "大货到仓",      actions: "到FBA仓库→入仓2天→缓冲12天后上架销售" },
+    { id: "festival",   daysBefore: 0,                   name: "节日销售",      actions: "广告加投，促销启动" }
+  ],
+  urgencyThresholds: { urgent: 0, week: 7, month: 30, plan: Infinity },
+  categories: {
+    decor:   { label: "🎃装饰", color: "#fb923c" },
+    gift:    { label: "🎁礼品", color: "#ec4899" },
+    apparel: { label: "👕服饰", color: "#8b5cf6" },
+    home:    { label: "🏠家居", color: "#14b8a6" }
+  },
+  months: [
+    { num: 7, label: "7月" }, { num: 8, label: "8月" }, { num: 9, label: "9月" },
+    { num: 10, label: "10月" }, { num: 11, label: "11月" }, { num: 12, label: "12月" }
+  ],
+  storageKey: "uk_festival_planner_v1"
+};
+const LOGISTICS_OPTIONS = [
+  { id: "sea",   label: "海运60天", icon: "🚢" },
+  { id: "truck", label: "卡航30天", icon: "🚆" },
+  { id: "air",   label: "空运13天", icon: "✈️" }
+];
+
+// ============================================
+// FESTIVALS：23个节日节点完整数据（2026年7-12月）
+// ============================================
+const FESTIVALS = [
+
+// ===== 7月（2个）=====
+{
+  id: "summer-bbq-2026",
+  name: "夏季户外/BBQ季", nameEn: "Summer Outdoor & BBQ Season", icon: "🍖",
+  date: "2026-07-01", month: 7, importance: "B", category: "trend",
+  themeColor: "#f97316",
+  products: [
+    { sku: "户外野餐垫(防水)", skuEn: "Waterproof Picnic Blanket", category: "decor", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约45-50%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["picnic blanket","outdoor mat"], sourcing: "1688: 户外野餐垫" },
+    { sku: "烧烤工具套装(便携)", skuEn: "Portable BBQ Tool Set", category: "home", costRange: "¥10-18", priceRange: "£8.99-9.99", margin: "约40-45%", matchScore: 3, riskLevel: "中", riskNote: "食品级不锈钢认证；体积偏大注意FBA费用", keywords: ["bbq tools","grill set"], sourcing: "1688: 烧烤工具套装" },
+    { sku: "户外昆虫观察罐(儿童)", skuEn: "Kids Bug Catcher Observation Jar", category: "gift", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 4, riskLevel: "低", riskNote: "儿童产品注意安全标识", keywords: ["bug catcher","insect jar","kids science","outdoor toy"], sourcing: "1688: 昆虫观察罐" },
+    { sku: "户外防潮坐垫(折叠便携)", skuEn: "Portable Waterproof Seat Pad Foldable", category: "home", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["seat pad","waterproof cushion","outdoor mat","portable pad"], sourcing: "1688: 防潮坐垫" }
+  ],
+  validation: {
+    googleTrends: ["bbq accessories uk","picnic blanket"],
+    amazonCheck: "BSR < 10000；季节性强，7月峰值",
+    sourcing: "1688搜索：BBQ/野餐/户外",
+    riskFlags: ["体积大者FBA费用高，需核算毛利"]
+  }
+},
+{
+  id: "summer-sale-2026",
+  name: "夏季促销", nameEn: "Summer Sale", icon: "☀️",
+  date: "2026-07-15", month: 7, importance: "A", category: "activity",
+  themeColor: "#14b8a6",
+  products: [
+    { sku: "便携小风扇(USB充电)", skuEn: "Portable USB Mini Fan", category: "home", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 5, riskLevel: "低", riskNote: "注意电池运输规定；选无电池款更安全", keywords: ["mini fan","portable fan","usb fan"], sourcing: "1688: 迷你USB风扇" },
+    { sku: "冰丝凉爽坐垫", skuEn: "Cooling Gel Seat Cushion", category: "home", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约45-50%", matchScore: 4, riskLevel: "低", riskNote: "常规品类无特殊风险", keywords: ["cooling cushion","gel seat pad"], sourcing: "1688: 冰丝凉垫" },
+    { sku: "防晒冰袖套", skuEn: "UV Protection Cooling Arm Sleeves", category: "apparel", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约50-60%", matchScore: 5, riskLevel: "低", riskNote: "注意UK成人尺码", keywords: ["arm sleeves","uv protection","cooling sleeves"], sourcing: "1688: 防晒冰袖" },
+    { sku: "便携BBQ烧烤垫", skuEn: "Portable BBQ Grill Mat", category: "decor", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约45-55%", matchScore: 4, riskLevel: "中", riskNote: "需食品级材质认证", keywords: ["bbq mat","grill mat","barbecue accessories"], sourcing: "1688: 烧烤垫" },
+    { sku: "遮阳帽(可折叠大檐)", skuEn: "Foldable Sun Hat Wide Brim", category: "apparel", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约40-50%", matchScore: 4, riskLevel: "低", riskNote: "常规品类；注意UK尺码", keywords: ["sun hat","summer hat","foldable hat","wide brim hat"], sourcing: "1688: 遮阳帽折叠" },
+    { sku: "硅胶冰格模具(创意造型)", skuEn: "Silicone Ice Cube Tray Creative", category: "home", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 5, riskLevel: "低", riskNote: "食品级硅胶认证；轻小件高毛利", keywords: ["ice cube tray","silicone mould","summer drinks"], sourcing: "1688: 硅胶冰格" },
+    { sku: "户外驱蚊手环(10只装)", skuEn: "Mosquito Repellent Bracelet 10 Pack", category: "apparel", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-60%", matchScore: 4, riskLevel: "中", riskNote: "驱蚊产品需有安全认证；避免药物功效宣传", keywords: ["mosquito bracelet","bug repellent","insect repellent"], sourcing: "1688: 驱蚊手环" },
+    { sku: "便携喷雾风扇(挂脖)", skuEn: "Neck Fan Portable Misting", category: "home", costRange: "¥10-18", priceRange: "£7.99-9.99", margin: "约40-45%", matchScore: 4, riskLevel: "中", riskNote: "电子UKCA认证；注意电池运输", keywords: ["neck fan","misting fan","hands free fan","portable fan"], sourcing: "1688: 挂脖风扇" }
+  ],
+  validation: {
+    googleTrends: ["summer sale 2026","cooling products uk"],
+    amazonCheck: "BSR < 8000 in Garden & Outdoors；头部评论 < 300",
+    sourcing: "1688搜索：夏季用品/防晒/便携风扇",
+    riskFlags: ["电子产品注意UKCA认证","食品接触材质需检测报告"]
+  }
+},
+
+// ===== 8月（3个）=====
+{
+  id: "youth-day-2026",
+  name: "国际青年节/亲子主题", nameEn: "International Youth Day", icon: "👨‍👩‍👧",
+  date: "2026-08-12", month: 8, importance: "B", category: "trend",
+  themeColor: "#a855f7",
+  products: [
+    { sku: "亲子装T恤套装", skuEn: "Family Matching T-Shirt Set", category: "apparel", costRange: "¥10-20", priceRange: "£8.99-9.99", margin: "约40-45%", matchScore: 3, riskLevel: "中", riskNote: "UK尺码对照；退货率偏高", keywords: ["family matching shirts","parent child"], sourcing: "1688: 亲子装" },
+    { sku: "DIY手工材料包", skuEn: "DIY Craft Kit for Kids", category: "gift", costRange: "¥5-10", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "注意小零件 choking hazard 标注", keywords: ["craft kit","diy for kids"], sourcing: "1688: 儿童手工包" },
+    { sku: "儿童贴纸簿(奖励贴纸)", skuEn: "Kids Reward Sticker Book", category: "gift", costRange: "¥2-5", priceRange: "£5.99-7.99", margin: "约60-70%", matchScore: 5, riskLevel: "低", riskNote: "轻小件高毛利", keywords: ["sticker book","reward stickers","kids stickers","motivation"], sourcing: "1688: 儿童奖励贴纸" },
+    { sku: "儿童彩色画笔套装(12色)", skuEn: "Kids Colour Pencil Set 12 Colors", category: "gift", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-60%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["colour pencils","kids pencils","art supplies","crayons"], sourcing: "1688: 彩色画笔套装" }
+  ],
+  validation: {
+    googleTrends: ["family matching","kids craft kit"],
+    amazonCheck: "BSR < 15000；小众但有稳定需求",
+    sourcing: "1688搜索：亲子/手工/儿童DIY",
+    riskFlags: ["儿童用品注意年龄标注和安全说明"]
+  }
+},
+{
+  id: "back-to-school-prep-2026",
+  name: "返校准备期", nameEn: "Back to School Prep", icon: "🎒",
+  date: "2026-08-20", month: 8, importance: "A", category: "activity",
+  themeColor: "#3b82f6",
+  products: [
+    { sku: "学生文具套装", skuEn: "Student Stationery Set", category: "gift", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 5, riskLevel: "低", riskNote: "常规品类", keywords: ["stationery set","school supplies"], sourcing: "1688: 学生文具套装" },
+    { sku: "儿童午餐盒(分格)", skuEn: "Kids Bento Lunch Box", category: "home", costRange: "¥5-10", priceRange: "£6.49-8.99", margin: "约45-55%", matchScore: 4, riskLevel: "中", riskNote: "食品级材质BPA-Free认证", keywords: ["lunch box","bento box","kids lunch"], sourcing: "1688: 儿童午餐盒" },
+    { sku: "书包挂饰/标签", skuEn: "Backpack Bag Tag", category: "gift", costRange: "¥2-5", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 5, riskLevel: "低", riskNote: "轻小件高毛利", keywords: ["bag tag","backpack accessories"], sourcing: "1688: 书包挂件" },
+    { sku: "卡通姓名贴纸", skuEn: "Personalized Name Stickers", category: "gift", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约60-70%", matchScore: 5, riskLevel: "低", riskNote: "需支持定制印刷", keywords: ["name stickers","school labels"], sourcing: "1688: 姓名贴定制" },
+    { sku: "透明文件袋(A4拉链)", skuEn: "A4 Clear Document Pouch Zip", category: "gift", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 4, riskLevel: "低", riskNote: "轻小件实用刚需", keywords: ["document pouch","file bag","a4 folder","school pouch"], sourcing: "1688: A4文件袋" },
+    { sku: "橡皮擦+尺子文具小套装", skuEn: "Eraser & Ruler Mini Stationery Set", category: "gift", costRange: "¥2-5", priceRange: "£5.99-6.99", margin: "约60-70%", matchScore: 4, riskLevel: "低", riskNote: "轻小件高毛利", keywords: ["eraser ruler set","stationery mini","school essentials"], sourcing: "1688: 橡皮尺子套装" }
+  ],
+  validation: {
+    googleTrends: ["back to school 2026","school supplies uk"],
+    amazonCheck: "BSR < 5000；8-9月强季节性",
+    sourcing: "1688搜索：文具/午餐盒/学生用品",
+    riskFlags: ["食品接触材质需认证","定制类需确认生产周期"]
+  }
+},
+{
+  id: "summer-bank-holiday-2026",
+  name: "夏季银行假", nameEn: "Summer Bank Holiday", icon: "🏖️",
+  date: "2026-08-31", month: 8, importance: "A", category: "activity",
+  themeColor: "#0ea5e9",
+  products: [
+    { sku: "海滩沙滩垫", skuEn: "Beach Beach Mat", category: "decor", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["beach mat","sand free blanket"], sourcing: "1688: 沙滩垫" },
+    { sku: "防水手机袋", skuEn: "Waterproof Phone Pouch", category: "home", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 5, riskLevel: "低", riskNote: "轻小件高毛利", keywords: ["waterproof phone case","beach pouch"], sourcing: "1688: 防水手机袋" },
+    { sku: "夏日主题派对装饰套装", skuEn: "Summer Party Decoration Set", category: "decor", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约45-50%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["summer party decorations","beach party"], sourcing: "1688: 夏日派对装饰" },
+    { sku: "冷感毛巾", skuEn: "Cooling Towel Microfiber", category: "apparel", costRange: "¥4-8", priceRange: "£6.49-8.49", margin: "约50-55%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["cooling towel","microfiber towel"], sourcing: "1688: 冰感毛巾" },
+    { sku: "沙滩玩具套装(铲桶组合)", skuEn: "Beach Toy Set Bucket & Spade", category: "gift", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "注意儿童玩具安全标识", keywords: ["beach toys","sand toys","bucket spade","kids beach"], sourcing: "1688: 沙滩玩具套装" },
+    { sku: "充气颈枕(旅行U型)", skuEn: "Inflatable Travel Neck Pillow U Shape", category: "home", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["neck pillow","travel pillow","inflatable pillow","u pillow"], sourcing: "1688: 充气颈枕" },
+    { sku: "遮阳伞(迷你便携防晒)", skuEn: "Compact UV Protection Umbrella", category: "apparel", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约40-50%", matchScore: 4, riskLevel: "低", riskNote: "季节尾注意库存控制", keywords: ["compact umbrella","uv umbrella","sun umbrella","travel umbrella"], sourcing: "1688: 迷你遮阳伞" }
+  ],
+  validation: {
+    googleTrends: ["bank holiday","beach accessories uk"],
+    amazonCheck: "BSR < 8000；8月底峰值",
+    sourcing: "1688搜索：沙滩/防水/派对",
+    riskFlags: ["季节末，注意不要积压库存"]
+  }
+},
+
+// ===== 9月（4个）=====
+{
+  id: "back-to-school-2026",
+  name: "返校季", nameEn: "Back to School", icon: "📚",
+  date: "2026-09-01", month: 9, importance: "A", category: "activity",
+  themeColor: "#3b82f6",
+  products: [
+    { sku: "笔记本套装(A5 5本)", skuEn: "A5 Notebook Set 5 Pack", category: "gift", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 5, riskLevel: "低", riskNote: "常规品类", keywords: ["notebook set","a5 notebooks","school stationery"], sourcing: "1688: A5笔记本套装" },
+    { sku: "铅笔盒/笔袋", skuEn: "Pencil Case Large Capacity", category: "gift", costRange: "¥4-8", priceRange: "£6.49-8.49", margin: "约50-60%", matchScore: 5, riskLevel: "低", riskNote: "轻小件高毛利", keywords: ["pencil case","pen bag"], sourcing: "1688: 笔袋" },
+    { sku: "学生水壶(保温)", skuEn: "Kids Insulated Water Bottle", category: "home", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约40-50%", matchScore: 4, riskLevel: "中", riskNote: "食品级不锈钢认证；保温效果测试", keywords: ["water bottle","kids flask","insulated bottle"], sourcing: "1688: 儿童保温杯" },
+    { sku: "课程表/计划表磁贴", skuEn: "Magnetic Weekly Planner", category: "home", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 4, riskLevel: "低", riskNote: "轻小件", keywords: ["magnetic planner","weekly schedule"], sourcing: "1688: 磁性计划表" },
+    { sku: "荧光笔套装(6色)", skuEn: "Highlighter Pen Set 6 Colors", category: "gift", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 5, riskLevel: "低", riskNote: "轻小件刚需", keywords: ["highlighter set","marker pens","study highlighter"], sourcing: "1688: 荧光笔套装" },
+    { sku: "书签套装(金属/磁性)", skuEn: "Bookmark Set Metal Magnetic", category: "gift", costRange: "¥2-5", priceRange: "£5.99-6.99", margin: "约60-70%", matchScore: 4, riskLevel: "低", riskNote: "轻小件高毛利", keywords: ["bookmarks","metal bookmark","magnetic bookmark","reading"], sourcing: "1688: 金属书签" },
+    { sku: "学生卡套/证件挂绳", skuEn: "Student ID Card Holder Lanyard", category: "gift", costRange: "¥2-5", priceRange: "£5.99-7.99", margin: "约60-70%", matchScore: 5, riskLevel: "低", riskNote: "轻小件实用刚需", keywords: ["card holder","id lanyard","student card","badge holder"], sourcing: "1688: 卡套挂绳" }
+  ],
+  validation: {
+    googleTrends: ["back to school supplies","stationery uk"],
+    amazonCheck: "BSR < 5000；9月初峰值",
+    sourcing: "1688搜索：文具/笔记本/学生用品",
+    riskFlags: ["食品接触材质需认证"]
+  }
+},
+{
+  id: "pirate-day-2026",
+  name: "海盗说话日", nameEn: "Talk Like a Pirate Day", icon: "🏴‍☠️",
+  date: "2026-09-19", month: 9, importance: "B", category: "trend",
+  themeColor: "#92400e",
+  products: [
+    { sku: "海盗主题派对套装", skuEn: "Pirate Party Decoration Kit", category: "decor", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约45-50%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["pirate party","pirate decorations"], sourcing: "1688: 海盗派对装饰" },
+    { sku: "海盗眼罩/帽子配件", skuEn: "Pirate Eye Patch & Hat", category: "apparel", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 5, riskLevel: "低", riskNote: "轻小件", keywords: ["pirate costume","eye patch"], sourcing: "1688: 海盗道具" },
+    { sku: "海盗金币巧克力包装(10只)", skuEn: "Pirate Gold Coin Chocolate Wraps", category: "gift", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-60%", matchScore: 4, riskLevel: "中", riskNote: "食品接触材质认证；不含巧克力仅包装", keywords: ["pirate coins","party favors","treasure chest","gold coins"], sourcing: "1688: 海盗金币包装" },
+    { sku: "海盗宝箱造型存钱罐", skuEn: "Pirate Treasure Chest Coin Bank", category: "decor", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "小众控制首批量", keywords: ["treasure chest","coin bank","pirate decor","piggy bank"], sourcing: "1688: 海盗存钱罐" }
+  ],
+  validation: {
+    googleTrends: ["pirate day","pirate party uk"],
+    amazonCheck: "BSR < 20000；小众但精准",
+    sourcing: "1688搜索：海盗/派对道具",
+    riskFlags: ["小众节日，控制首批量"]
+  }
+},
+{
+  id: "apple-day-2026",
+  name: "下午茶季/Apple Day", nameEn: "Afternoon Tea Season", icon: "🫖",
+  date: "2026-09-21", month: 9, importance: "A", category: "trend",
+  themeColor: "#84cc16",
+  products: [
+    { sku: "陶瓷下午茶杯碟套装", skuEn: "Ceramic Teacup & Saucer Set", category: "home", costRange: "¥10-18", priceRange: "£8.99-9.99", margin: "约40-45%", matchScore: 3, riskLevel: "中", riskNote: "易碎品包装成本；FBA尺寸重量", keywords: ["teacup set","afternoon tea","ceramic cups"], sourcing: "1688: 下午茶杯碟" },
+    { sku: "木质茶点托盘", skuEn: "Wooden Serving Tray", category: "home", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约40-50%", matchScore: 3, riskLevel: "低", riskNote: "体积偏大注意FBA费用", keywords: ["serving tray","wooden tray","tea tray"], sourcing: "1688: 木质托盘" },
+    { sku: "杯垫套装(软木)", skuEn: "Cork Coaster Set", category: "decor", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 5, riskLevel: "低", riskNote: "轻小件高毛利", keywords: ["cork coasters","drink coasters"], sourcing: "1688: 软木杯垫" },
+    { sku: "英式花纹餐巾纸套装", skuEn: "Floral Paper Napkin Set", category: "decor", costRange: "¥4-8", priceRange: "£6.49-8.49", margin: "约50-55%", matchScore: 4, riskLevel: "低", riskNote: "食品接触材质", keywords: ["paper napkins","floral napkins"], sourcing: "1688: 花纹餐巾纸" },
+    { sku: "不锈钢茶叶滤网(球形)", skuEn: "Stainless Steel Tea Infuser Ball", category: "home", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 5, riskLevel: "低", riskNote: "轻小件实用", keywords: ["tea infuser","tea strainer","tea ball","loose leaf tea"], sourcing: "1688: 茶叶滤网" },
+    { sku: "亚麻餐垫套装(4片)", skuEn: "Linen Placemat Set 4 Pack", category: "home", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约40-50%", matchScore: 3, riskLevel: "低", riskNote: "常规品类", keywords: ["linen placemat","table mat","dining mat","table decor"], sourcing: "1688: 亚麻餐垫" },
+    { sku: "花卉主题茶壶保温罩", skuEn: "Floral Teapot Cosy Cover", category: "home", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约40-50%", matchScore: 3, riskLevel: "低", riskNote: "体积偏大注意FBA；小众但英式场景", keywords: ["teapot cosy","tea cosy","teapot cover","afternoon tea"], sourcing: "1688: 茶壶保温罩" }
+  ],
+  validation: {
+    googleTrends: ["afternoon tea","tea accessories uk"],
+    amazonCheck: "BSR < 10000；秋季稳定需求",
+    sourcing: "1688搜索：茶具/杯垫/托盘",
+    riskFlags: ["陶瓷易碎需加强包装","体积大者核算FBA"]
+  }
+},
+{
+  id: "harvest-festival-2026",
+  name: "收获节", nameEn: "Harvest Festival", icon: "🌾",
+  date: "2026-09-27", month: 9, importance: "B", category: "festival",
+  themeColor: "#ca8a04",
+  products: [
+    { sku: "秋季主题门环装饰", skuEn: "Autumn Wreath Decoration", category: "decor", costRange: "¥10-18", priceRange: "£8.99-9.99", margin: "约40-45%", matchScore: 3, riskLevel: "低", riskNote: "体积偏大注意FBA", keywords: ["autumn wreath","harvest wreath","fall decor"], sourcing: "1688: 秋季门环" },
+    { sku: "南瓜主题摆件", skuEn: "Pumpkin Figurine Decor", category: "decor", costRange: "¥5-10", priceRange: "£6.49-8.99", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["pumpkin decor","fall decorations"], sourcing: "1688: 南瓜摆件" },
+    { sku: "秋季叶形蜡烛托盘", skuEn: "Autumn Leaf Candle Holder Tray", category: "decor", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "与万圣节/圣诞衔接", keywords: ["leaf candle holder","autumn tray","fall decor","candle tray"], sourcing: "1688: 秋季蜡烛托盘" },
+    { sku: "谷物丰收花束(干花装饰)", skuEn: "Harvest Dried Flower Bouquet Decor", category: "decor", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-50%", matchScore: 3, riskLevel: "低", riskNote: "体积偏大注意FBA", keywords: ["dried flowers","harvest bouquet","autumn flowers","fall wreath"], sourcing: "1688: 干花装饰" }
+  ],
+  validation: {
+    googleTrends: ["harvest festival","autumn decorations uk"],
+    amazonCheck: "BSR < 15000；与万圣节衔接",
+    sourcing: "1688搜索：秋季/南瓜/丰收装饰",
+    riskFlags: ["与万圣节备货可合并考虑"]
+  }
+},
+
+// ===== 10月（5个）=====
+{
+  id: "teachers-day-2026",
+  name: "世界教师日", nameEn: "World Teachers Day", icon: "🍎",
+  date: "2026-10-05", month: 10, importance: "B", category: "festival",
+  themeColor: "#dc2626",
+  products: [
+    { sku: "教师主题马克杯", skuEn: "Teacher Themed Mug", category: "gift", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 4, riskLevel: "中", riskNote: "陶瓷易碎", keywords: ["teacher mug","teacher gift","best teacher"], sourcing: "1688: 教师节马克杯" },
+    { sku: "感谢卡+小礼品套装", skuEn: "Thank You Card & Gift Set", category: "gift", costRange: "¥4-8", priceRange: "£5.99-7.99", margin: "约50-60%", matchScore: 5, riskLevel: "低", riskNote: "轻小件", keywords: ["teacher card","thank you gift","appreciation"], sourcing: "1688: 感谢卡套装" },
+    { sku: "教师主题书签套装", skuEn: "Teacher Bookmark Set", category: "gift", costRange: "¥2-5", priceRange: "£5.99-6.99", margin: "约60-70%", matchScore: 5, riskLevel: "低", riskNote: "轻小件高毛利", keywords: ["teacher bookmark","book lover","reading gift","school bookmark"], sourcing: "1688: 教师书签" },
+    { sku: "桌面笔筒(创意造型)", skuEn: "Creative Pen Holder Desk Organizer", category: "home", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["pen holder","desk organizer","pencil cup","teacher desk"], sourcing: "1688: 创意笔筒" }
+  ],
+  validation: {
+    googleTrends: ["teacher gift","teachers day uk"],
+    amazonCheck: "BSR < 15000；小众节日",
+    sourcing: "1688搜索：教师节礼物/马克杯",
+    riskFlags: ["避免印刷具体学校logo"]
+  }
+},
+{
+  id: "mental-health-day-2026",
+  name: "世界精神卫生日", nameEn: "World Mental Health Day", icon: "💚",
+  date: "2026-10-10", month: 10, importance: "B", category: "trend",
+  themeColor: "#10b981",
+  products: [
+    { sku: "励志手环套装", skuEn: "Inspirational Bracelet Set", category: "apparel", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 5, riskLevel: "低", riskNote: "轻小件", keywords: ["inspirational bracelet","mental health awareness"], sourcing: "1688: 励志手环" },
+    { sku: "减压捏捏玩具", skuEn: "Stress Relief Squeeze Toy", category: "gift", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 5, riskLevel: "低", riskNote: "注意材质安全", keywords: ["stress ball","fidget toy","anxiety relief"], sourcing: "1688: 减压玩具" },
+    { sku: "正能量语录卡片套装", skuEn: "Positive Affirmation Card Set", category: "gift", costRange: "¥2-5", priceRange: "£5.99-7.99", margin: "约60-70%", matchScore: 5, riskLevel: "低", riskNote: "轻小件高毛利", keywords: ["affirmation cards","positive quotes","mental health","self care"], sourcing: "1688: 正能量卡片" },
+    { sku: "冥想瑜伽垫绑带套装", skuEn: "Yoga Mat Strap Carrying Band", category: "home", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-60%", matchScore: 4, riskLevel: "低", riskNote: "轻小件", keywords: ["yoga strap","mat carrier","yoga accessories","fitness"], sourcing: "1688: 瑜伽绑带" }
+  ],
+  validation: {
+    googleTrends: ["mental health awareness","stress relief"],
+    amazonCheck: "BSR < 15000；趋势上升",
+    sourcing: "1688搜索：减压/励志/心理",
+    riskFlags: ["避免医疗功效宣传"]
+  }
+},
+{
+  id: "boss-day-2026",
+  name: "Boss's Day老板节", nameEn: "Boss's Day", icon: "👔",
+  date: "2026-10-16", month: 10, importance: "B", category: "festival",
+  themeColor: "#1e40af",
+  products: [
+    { sku: "老板主题幽默马克杯", skuEn: "Funny Boss Mug", category: "gift", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 4, riskLevel: "中", riskNote: "陶瓷易碎", keywords: ["boss mug","boss gift","funny mug"], sourcing: "1688: 老板节杯子" },
+    { sku: "桌面收纳套装", skuEn: "Desk Organizer Set", category: "home", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约40-50%", matchScore: 3, riskLevel: "低", riskNote: "体积偏大", keywords: ["desk organizer","office accessories","boss gift"], sourcing: "1688: 桌面收纳" },
+    { sku: "老板主题领带夹/袖扣", skuEn: "Boss Cufflinks Tie Clip Set", category: "gift", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约50-55%", matchScore: 4, riskLevel: "低", riskNote: "轻小件", keywords: ["cufflinks","tie clip","boss gift","office accessories"], sourcing: "1688: 袖扣领带夹" },
+    { sku: "办公减压指尖陀螺", skuEn: "Fidget Spinner Desk Toy", category: "gift", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 4, riskLevel: "低", riskNote: "轻小件；小众控制首批量", keywords: ["fidget spinner","desk toy","stress relief","office toy"], sourcing: "1688: 指尖陀螺" }
+  ],
+  validation: {
+    googleTrends: ["boss day gift","boss gift uk"],
+    amazonCheck: "BSR < 20000；小众",
+    sourcing: "1688搜索：办公礼品/马克杯",
+    riskFlags: ["小众节日控制首批量"]
+  }
+},
+{
+  id: "diwali-2026",
+  name: "排灯节", nameEn: "Diwali", icon: "🪔",
+  date: "2026-10-20", month: 10, importance: "B", category: "festival",
+  themeColor: "#facc15",
+  products: [
+    { sku: "LED装饰灯串(暖白)", skuEn: "LED Diya String Lights", category: "decor", costRange: "¥8-15", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 5, riskLevel: "低", riskNote: "UKCA认证", keywords: ["diwali lights","string lights","diya decor"], sourcing: "1688: LED灯串" },
+    { sku: "排灯节主题贺卡套装", skuEn: "Diwali Card Set", category: "gift", costRange: "¥4-8", priceRange: "£5.99-7.99", margin: "约50-60%", matchScore: 4, riskLevel: "低", riskNote: "轻小件", keywords: ["diwali cards","festival cards"], sourcing: "1688: 排灯节贺卡" },
+    { sku: "印度风彩色桌旗装饰", skuEn: "Indian Style Colourful Table Runner", category: "decor", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["table runner","diwali decor","indian decor","festive table"], sourcing: "1688: 印度风桌旗" },
+    { sku: "排灯节主题蜡烛套装(茶蜡)", skuEn: "Diwali Tea Light Candle Set", category: "home", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-60%", matchScore: 4, riskLevel: "中", riskNote: "蜡烛安全标签；尊重宗教文化", keywords: ["tea lights","diwali candles","festival candles","scented candles"], sourcing: "1688: 茶蜡套装" }
+  ],
+  validation: {
+    googleTrends: ["diwali decorations","diwali gifts uk"],
+    amazonCheck: "BSR < 10000；UK印度裔社区需求",
+    sourcing: "1688搜索：排灯节/Diwali装饰",
+    riskFlags: ["尊重宗教文化，避免不当元素"]
+  }
+},
+{
+  id: "halloween-2026",
+  name: "万圣节", nameEn: "Halloween", icon: "🎃",
+  date: "2026-10-31", month: 10, importance: "S", category: "festival",
+  themeColor: "#fb923c",
+  products: [
+    { sku: "南瓜LED串灯", skuEn: "Pumpkin LED String Lights", category: "decor", costRange: "¥8-15", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 5, riskLevel: "低", riskNote: "注意LED的UKCA/CE认证", keywords: ["halloween lights","pumpkin lights","outdoor halloween"], sourcing: "1688: 万圣节南瓜灯串" },
+    { sku: "鬼怪窗贴纸套装", skuEn: "Halloween Window Clings Set", category: "decor", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 4, riskLevel: "低", riskNote: "轻小件高毛利", keywords: ["window clings","halloween stickers","window decor"], sourcing: "1688: 万圣节窗贴" },
+    { sku: "蜘蛛网装饰套装", skuEn: "Spider Web Decoration Set", category: "decor", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["spider web","halloween decorations","fake web"], sourcing: "1688: 蜘蛛网装饰" },
+    { sku: "万圣节主题糖果袋(10只装)", skuEn: "Halloween Treat Bags 10 Pack", category: "gift", costRange: "¥6-12", priceRange: "£7.99-9.99", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "食品接触材质", keywords: ["treat bags","halloween candy bags","trick or treat"], sourcing: "1688: 万圣节糖果袋" },
+    { sku: "南瓜主题儿童斗篷", skuEn: "Kids Pumpkin Cape Costume", category: "apparel", costRange: "¥10-18", priceRange: "£8.99-9.99", margin: "约40-45%", matchScore: 3, riskLevel: "中", riskNote: "UK儿童尺码；含阻燃标签要求", keywords: ["kids costume","pumpkin cape","halloween costume"], sourcing: "1688: 儿童南瓜斗篷" },
+    { sku: "万圣节主题餐垫套装", skuEn: "Halloween Placemat Set", category: "home", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["halloween placemats","table decor","party supplies"], sourcing: "1688: 万圣节餐垫" },
+    { sku: "骷髅骨架摆件", skuEn: "Skeleton Decoration Prop", category: "decor", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约45-50%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["skeleton decoration","halloween props","bone decor"], sourcing: "1688: 骷髅摆件" },
+    { sku: "万圣节派对气球套装", skuEn: "Halloween Party Balloon Set", category: "decor", costRange: "¥4-8", priceRange: "£5.99-7.99", margin: "约50-60%", matchScore: 5, riskLevel: "低", riskNote: "轻小件", keywords: ["halloween balloons","party balloons"], sourcing: "1688: 万圣节气球" },
+    { sku: "主题马克杯(南瓜造型)", skuEn: "Pumpkin Shaped Mug", category: "home", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约40-50%", matchScore: 4, riskLevel: "中", riskNote: "陶瓷易碎包装", keywords: ["pumpkin mug","halloween mug","novelty cup"], sourcing: "1688: 南瓜造型杯" },
+    { sku: "幽灵主题抱枕套", skuEn: "Ghost Throw Pillow Cover", category: "home", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约50-55%", matchScore: 4, riskLevel: "低", riskNote: "注意是枕套非枕头", keywords: ["pillow cover","ghost decor","halloween home"], sourcing: "1688: 万圣节抱枕套" },
+    { sku: "吸血鬼假牙道具套装", skuEn: "Vampire Fangs Prop Set", category: "apparel", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约60-70%", matchScore: 5, riskLevel: "中", riskNote: "入口道具需食品级材质", keywords: ["vampire fangs","halloween props","fake teeth"], sourcing: "1688: 吸血鬼假牙" },
+    { sku: "万圣节礼物盒套装(5只)", skuEn: "Halloween Gift Boxes 5 Pack", category: "gift", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["gift boxes","halloween boxes","party favors"], sourcing: "1688: 万圣节礼盒" }
+  ],
+  validation: {
+    googleTrends: ["halloween decorations 2026","halloween decor uk"],
+    amazonCheck: "BSR < 3000；10月强季节性峰值",
+    sourcing: "1688搜索：万圣节装饰/南瓜/骷髅",
+    riskFlags: ["LED产品需UKCA认证","儿童服装需阻燃标签","避免Disney/IP侵权","入口道具需食品级"]
+  }
+},
+
+// ===== 11月（6个）=====
+{
+  id: "bonfire-night-2026",
+  name: "篝火节", nameEn: "Bonfire Night", icon: "🎆",
+  date: "2026-11-05", month: 11, importance: "B", category: "festival",
+  themeColor: "#ea580c",
+  products: [
+    { sku: "发光荧光棒套装", skuEn: "Glow Stick Set", category: "decor", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约50-55%", matchScore: 5, riskLevel: "中", riskNote: "化学发光产品需安全认证", keywords: ["glow sticks","bonfire night","light sticks"], sourcing: "1688: 荧光棒套装" },
+    { sku: "保暖暖手宝", skuEn: "Reusable Hand Warmers", category: "home", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 4, riskLevel: "中", riskNote: "注意材质安全", keywords: ["hand warmers","reusable warmers","bonfire night"], sourcing: "1688: 暖手宝" },
+    { sku: "篝火节主题围巾/披肩", skuEn: "Bonfire Night Scarf Wrap", category: "apparel", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约40-50%", matchScore: 3, riskLevel: "低", riskNote: "UK尺码；季节性需求", keywords: ["winter scarf","bonfire scarf","warm wrap","plaid scarf"], sourcing: "1688: 保暖围巾" }
+  ],
+  validation: {
+    googleTrends: ["bonfire night","guy fawkes"],
+    amazonCheck: "BSR < 12000；11月初峰值",
+    sourcing: "1688搜索：荧光棒/暖手宝",
+    riskFlags: ["荧光棒化学安全认证","暖手宝材质检测"]
+  }
+},
+{
+  id: "remembrance-day-2026",
+  name: "国殇纪念日", nameEn: "Remembrance Day", icon: "🌹",
+  date: "2026-11-11", month: 11, importance: "B", category: "festival",
+  themeColor: "#7f1d1d",
+  products: [
+    { sku: "虞美人主题胸针", skuEn: "Poppy Brooch Pin", category: "gift", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 4, riskLevel: "高", riskNote: "罂粟图案有使用规范，建议中性设计；避免政治符号", keywords: ["poppy pin","remembrance day","memorial brooch"], sourcing: "1688: 胸针定制" },
+    { sku: "纪念主题木牌摆件", skuEn: "Memorial Wooden Sign", category: "decor", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约45-55%", matchScore: 3, riskLevel: "高", riskNote: "情绪敏感，文案需谨慎", keywords: ["remembrance","memorial decor","lest we forget"], sourcing: "1688: 木质摆件" },
+    { sku: "白色和平主题蜡烛", skuEn: "White Peace Themed Candle", category: "home", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约45-55%", matchScore: 3, riskLevel: "高", riskNote: "⚠️高度敏感：避免政治符号；蜡烛安全标签", keywords: ["peace candle","memorial candle","white candle","remembrance"], sourcing: "1688: 白色蜡烛" }
+  ],
+  validation: {
+    googleTrends: ["remembrance day","poppy appeal"],
+    amazonCheck: "BSR < 15000；情绪敏感品类",
+    sourcing: "1688搜索：纪念/胸针/木牌",
+    riskFlags: ["⚠️高度敏感：罂粟图案使用受Royal British Legion规范","避免军事/政治符号","建议只做中性纪念类"]
+  }
+},
+{
+  id: "kindness-day-2026",
+  name: "世界友善日", nameEn: "World Kindness Day", icon: "💛",
+  date: "2026-11-13", month: 11, importance: "B", category: "trend",
+  themeColor: "#eab308",
+  products: [
+    { sku: "友善主题贴纸套装", skuEn: "Kindness Sticker Set", category: "gift", costRange: "¥2-5", priceRange: "£5.99-7.99", margin: "约60-70%", matchScore: 5, riskLevel: "低", riskNote: "轻小件高毛利", keywords: ["kindness stickers","positive stickers","school stickers"], sourcing: "1688: 励志贴纸" },
+    { sku: "友善主题手环", skuEn: "Kindness Bracelet", category: "apparel", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 5, riskLevel: "低", riskNote: "轻小件", keywords: ["kindness bracelet","be kind","awareness"], sourcing: "1688: 励志手环" },
+    { sku: "友善主题钥匙扣(励志语)", skuEn: "Kindness Keychain Inspirational Quote", category: "gift", costRange: "¥2-5", priceRange: "£5.99-7.99", margin: "约60-70%", matchScore: 5, riskLevel: "低", riskNote: "轻小件高毛利", keywords: ["kindness keychain","inspirational key","motivational gift","positive"], sourcing: "1688: 励志钥匙扣" },
+    { sku: "友善主题马克杯", skuEn: "Be Kind Themed Mug", category: "home", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 4, riskLevel: "中", riskNote: "陶瓷易碎", keywords: ["kindness mug","be kind mug","positive mug","gift mug"], sourcing: "1688: 励志马克杯" }
+  ],
+  validation: {
+    googleTrends: ["world kindness day","kindness gifts"],
+    amazonCheck: "BSR < 20000；趋势型",
+    sourcing: "1688搜索：友善/励志/贴纸",
+    riskFlags: ["小众节日控制首批量"]
+  }
+},
+{
+  id: "mens-day-2026",
+  name: "国际男人节", nameEn: "International Men's Day", icon: "👨",
+  date: "2026-11-19", month: 11, importance: "A", category: "festival",
+  themeColor: "#1d4ed8",
+  products: [
+    { sku: "男士主题马克杯", skuEn: "Men's Day Mug", category: "gift", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 4, riskLevel: "中", riskNote: "陶瓷易碎", keywords: ["mens day mug","men gift","man mug"], sourcing: "1688: 男士马克杯" },
+    { sku: "胡须护理套装", skuEn: "Beard Care Kit", category: "gift", costRange: "¥10-18", priceRange: "£8.99-9.99", margin: "约40-50%", matchScore: 3, riskLevel: "中", riskNote: "化妆品类需成分合规", keywords: ["beard kit","beard care","mens grooming"], sourcing: "1688: 胡须护理套装" },
+    { sku: "幽默领带/袜子", skuEn: "Funny Novelty Socks", category: "apparel", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "UK尺码", keywords: ["novelty socks","funny socks","mens socks"], sourcing: "1688: 搞怪袜子" },
+    { sku: "多功能钥匙扣工具", skuEn: "Multi-tool Keychain", category: "home", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 5, riskLevel: "低", riskNote: "轻小件实用", keywords: ["keychain tool","multi tool","edc keychain"], sourcing: "1688: 钥匙扣工具" },
+    { sku: "男士皮质卡包(短款)", skuEn: "Men's Leather Card Wallet Short", category: "gift", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["leather wallet","card wallet","mens wallet","slim wallet"], sourcing: "1688: 男士卡包" },
+    { sku: "车载手机支架(出风口)", skuEn: "Car Phone Holder Air Vent Mount", category: "home", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约50-55%", matchScore: 5, riskLevel: "低", riskNote: "实用刚需；轻小件", keywords: ["car phone holder","car mount","phone stand car","air vent holder"], sourcing: "1688: 车载手机支架" },
+    { sku: "旅行洗漱包(防水)", skuEn: "Travel Toiletry Bag Waterproof", category: "gift", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "实用刚需", keywords: ["toiletry bag","travel bag","wash bag","grooming bag"], sourcing: "1688: 洗漱包" }
+  ],
+  validation: {
+    googleTrends: ["mens day gift","men gifts uk"],
+    amazonCheck: "BSR < 10000；11月稳定需求",
+    sourcing: "1688搜索：男士礼品/胡须/袜子",
+    riskFlags: ["化妆品类注意UK成分合规"]
+  }
+},
+{
+  id: "black-friday-2026",
+  name: "黑五", nameEn: "Black Friday", icon: "🛍️",
+  date: "2026-11-27", month: 11, importance: "S", category: "activity",
+  themeColor: "#111827",
+  products: [
+    { sku: "保暖手套(触屏)", skuEn: "Touch Screen Winter Gloves", category: "apparel", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 5, riskLevel: "低", riskNote: "UK尺码", keywords: ["touch screen gloves","winter gloves","warm gloves"], sourcing: "1688: 触屏手套" },
+    { sku: "LED化妆镜", skuEn: "LED Vanity Mirror", category: "home", costRange: "¥10-18", priceRange: "£8.99-9.99", margin: "约40-50%", matchScore: 4, riskLevel: "中", riskNote: "电子+易碎", keywords: ["led mirror","vanity mirror","makeup mirror"], sourcing: "1688: LED化妆镜" },
+    { sku: "加湿器(便携)", skuEn: "Portable Humidifier", category: "home", costRange: "¥10-18", priceRange: "£8.99-9.99", margin: "约40-45%", matchScore: 4, riskLevel: "中", riskNote: "电子UKCA认证", keywords: ["humidifier","portable humidifier","desk humidifier"], sourcing: "1688: 便携加湿器" },
+    { sku: "蓝牙耳机包/收纳", skuEn: "Earbuds Case Pouch", category: "gift", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 5, riskLevel: "低", riskNote: "轻小件", keywords: ["earbuds case","airpods pouch","storage case"], sourcing: "1688: 耳机收纳包" },
+    { sku: "冬季围巾", skuEn: "Winter Scarf", category: "apparel", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约45-50%", matchScore: 4, riskLevel: "低", riskNote: "UK尺码", keywords: ["winter scarf","warm scarf","mens scarf"], sourcing: "1688: 冬季围巾" },
+    { sku: "手机支架(床头)", skuEn: "Phone Bed Stand Holder", category: "home", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 5, riskLevel: "低", riskNote: "实用刚需", keywords: ["phone stand","bed stand","phone holder"], sourcing: "1688: 手机支架" },
+    { sku: "保温杯(不锈钢)", skuEn: "Insulated Tumbler", category: "home", costRange: "¥10-18", priceRange: "£8.99-9.99", margin: "约40-50%", matchScore: 4, riskLevel: "中", riskNote: "食品级认证", keywords: ["tumbler","insulated cup","thermal flask"], sourcing: "1688: 保温杯" },
+    { sku: "桌面小夜灯", skuEn: "Desk Night Light", category: "home", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约45-50%", matchScore: 4, riskLevel: "中", riskNote: "电子UKCA", keywords: ["night light","desk lamp","bedroom light"], sourcing: "1688: 小夜灯" },
+    { sku: "旅行收纳袋套装", skuEn: "Travel Organizer Bags Set", category: "gift", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约45-55%", matchScore: 5, riskLevel: "低", riskNote: "实用", keywords: ["travel organizer","packing cubes","luggage bags"], sourcing: "1688: 旅行收纳套装" },
+    { sku: "宠物玩具套装", skuEn: "Pet Toy Set", category: "gift", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "注意宠物安全材质", keywords: ["dog toys","pet toys","chew toys"], sourcing: "1688: 宠物玩具" },
+    { sku: "厨房收纳架", skuEn: "Kitchen Organizer Rack", category: "home", costRange: "¥10-18", priceRange: "£8.99-9.99", margin: "约40-45%", matchScore: 3, riskLevel: "低", riskNote: "体积偏大", keywords: ["kitchen organizer","storage rack","pantry organizer"], sourcing: "1688: 厨房收纳" },
+    { sku: "圣诞预热装饰小件", skuEn: "Mini Christmas Decorations", category: "decor", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约50-55%", matchScore: 5, riskLevel: "低", riskNote: "衔接圣诞", keywords: ["mini christmas","small decor","tree ornaments"], sourcing: "1688: 迷你圣诞装饰" }
+  ],
+  validation: {
+    googleTrends: ["black friday deals 2026","gift ideas uk"],
+    amazonCheck: "BSR < 2000；全年最大流量节点",
+    sourcing: "1688搜索：冬季/电子/家居/礼品",
+    riskFlags: ["电子产品需UKCA认证","竞争最激烈需早备货","食品接触材质认证"]
+  }
+},
+{
+  id: "cyber-monday-2026",
+  name: "网一", nameEn: "Cyber Monday", icon: "💻",
+  date: "2026-11-30", month: 11, importance: "A", category: "activity",
+  themeColor: "#4338ca",
+  products: [
+    { sku: "笔记本内胆包", skuEn: "Laptop Sleeve Case", category: "home", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约45-50%", matchScore: 4, riskLevel: "低", riskNote: "尺寸适配UK常见型号", keywords: ["laptop sleeve","laptop case","notebook bag"], sourcing: "1688: 笔记本内胆包" },
+    { sku: "键盘清洁套装", skuEn: "Keyboard Cleaning Kit", category: "home", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约50-55%", matchScore: 5, riskLevel: "低", riskNote: "轻小件实用", keywords: ["keyboard cleaner","cleaning kit","pc accessories"], sourcing: "1688: 键盘清洁套装" },
+    { sku: "手机壳套装(3只)", skuEn: "Phone Case Set 3 Pack", category: "gift", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约50-55%", matchScore: 4, riskLevel: "低", riskNote: "注意适配新机型", keywords: ["phone case","phone cover","smartphone case"], sourcing: "1688: 手机壳套装" },
+    { sku: "USB集线器收纳盒", skuEn: "USB Hub Storage Box", category: "home", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "桌面整理", keywords: ["cable management","desk organizer","cord holder"], sourcing: "1688: 线缆收纳盒" },
+    { sku: "鼠标垫(加厚大号)", skuEn: "Extended Mouse Pad Large Thick", category: "home", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-50%", matchScore: 4, riskLevel: "低", riskNote: "体积偏大注意FBA", keywords: ["mouse pad","desk mat","large mousepad","gaming pad"], sourcing: "1688: 大号鼠标垫" },
+    { sku: "笔记本支架(铝合金折叠)", skuEn: "Laptop Stand Aluminium Foldable", category: "home", costRange: "¥10-18", priceRange: "£7.99-9.99", margin: "约40-45%", matchScore: 4, riskLevel: "低", riskNote: "实用刚需；注意折叠尺寸FBA", keywords: ["laptop stand","notebook holder","ergonomic stand","foldable stand"], sourcing: "1688: 笔记本支架" },
+    { sku: "Type-C充电线套装(3条)", skuEn: "USB-C Charging Cable Set 3 Pack", category: "gift", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 5, riskLevel: "低", riskNote: "轻小件刚需高复购", keywords: ["usb c cable","charging cable","type c","cable set"], sourcing: "1688: Type-C数据线" }
+  ],
+  validation: {
+    googleTrends: ["cyber monday deals","tech accessories uk"],
+    amazonCheck: "BSR < 5000；与黑五衔接",
+    sourcing: "1688搜索：数码配件/电脑周边",
+    riskFlags: ["电子产品需UKCA认证","注意品牌专利（手机型号）"]
+  }
+},
+
+// ===== 12月（3个）=====
+{
+  id: "tree-dressing-day-2026",
+  name: "National Tree Dressing Day", nameEn: "Tree Dressing Day", icon: "🌳",
+  date: "2026-12-05", month: 12, importance: "A", category: "festival",
+  themeColor: "#15803d",
+  products: [
+    { sku: "户外装饰彩带", skuEn: "Outdoor Decorative Ribbon", category: "decor", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约50-55%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["tree ribbon","outdoor ribbon","decorative ribbon"], sourcing: "1688: 装饰彩带" },
+    { sku: "木质挂饰套装", skuEn: "Wooden Hanging Ornament Set", category: "decor", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "与圣诞衔接", keywords: ["wooden ornaments","tree decorations","hanging decor"], sourcing: "1688: 木质挂饰" },
+    { sku: "LED灯串(户外防水暖白)", skuEn: "LED String Lights Outdoor Warm White", category: "decor", costRange: "¥8-15", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 5, riskLevel: "低", riskNote: "UKCA认证；衔接圣诞", keywords: ["string lights","outdoor lights","garden lights","led lights"], sourcing: "1688: LED灯串户外" },
+    { sku: "松果装饰挂件(天然)", skuEn: "Natural Pine Cone Hanging Decor", category: "decor", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-65%", matchScore: 4, riskLevel: "低", riskNote: "天然材质；与圣诞衔接", keywords: ["pine cone","natural decor","rustic ornaments","tree hanging"], sourcing: "1688: 松果装饰" }
+  ],
+  validation: {
+    googleTrends: ["tree dressing day","outdoor decorations"],
+    amazonCheck: "BSR < 15000；小众与圣诞衔接",
+    sourcing: "1688搜索：彩带/木质挂饰",
+    riskFlags: ["与圣诞备货可合并"]
+  }
+},
+{
+  id: "christmas-2026",
+  name: "圣诞节", nameEn: "Christmas", icon: "🎄",
+  date: "2026-12-25", month: 12, importance: "S", category: "festival",
+  themeColor: "#dc2626",
+  products: [
+    { sku: "圣诞树挂件套装(24只)", skuEn: "Christmas Tree Ornaments 24 Pack", category: "decor", costRange: "¥8-15", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 5, riskLevel: "低", riskNote: "常规品类", keywords: ["christmas ornaments","tree decorations","baubles"], sourcing: "1688: 圣诞挂件套装" },
+    { sku: "圣诞主题LED串灯", skuEn: "Christmas LED String Lights", category: "decor", costRange: "¥8-15", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 5, riskLevel: "低", riskNote: "UKCA认证", keywords: ["christmas lights","string lights","outdoor christmas"], sourcing: "1688: 圣诞LED灯串" },
+    { sku: "圣诞袜(悬挂装饰)", skuEn: "Christmas Stocking Set", category: "decor", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约50-55%", matchScore: 5, riskLevel: "低", riskNote: "常规品类", keywords: ["christmas stocking","hanging stocking","xmas decor"], sourcing: "1688: 圣诞袜" },
+    { sku: "圣诞主题礼品袋套装", skuEn: "Christmas Gift Bags Set", category: "gift", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约50-55%", matchScore: 5, riskLevel: "低", riskNote: "刚需高销量", keywords: ["gift bags","christmas bags","present bags"], sourcing: "1688: 圣诞礼品袋" },
+    { sku: "圣诞主题包装纸套装", skuEn: "Christmas Wrapping Paper Set", category: "gift", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约50-55%", matchScore: 5, riskLevel: "低", riskNote: "刚需", keywords: ["wrapping paper","christmas wrap","gift wrap"], sourcing: "1688: 圣诞包装纸" },
+    { sku: "圣诞主题马克杯套装", skuEn: "Christmas Mug Set", category: "home", costRange: "¥10-18", priceRange: "£8.99-9.99", margin: "约40-50%", matchScore: 4, riskLevel: "中", riskNote: "陶瓷易碎", keywords: ["christmas mug","xmas mug","festive cup"], sourcing: "1688: 圣诞马克杯" },
+    { sku: "圣诞主题抱枕套", skuEn: "Christmas Pillow Cover", category: "home", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约50-55%", matchScore: 5, riskLevel: "低", riskNote: "枕套非枕头", keywords: ["pillow cover","christmas pillow","xmas decor"], sourcing: "1688: 圣诞抱枕套" },
+    { sku: "圣诞主题餐垫套装", skuEn: "Christmas Placemat Set", category: "home", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约50-55%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["christmas placemats","table decor","xmas dining"], sourcing: "1688: 圣诞餐垫" },
+    { sku: "圣诞主题餐具套装", skuEn: "Christmas Tableware Set", category: "home", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约45-50%", matchScore: 4, riskLevel: "中", riskNote: "食品接触材质", keywords: ["christmas tableware","paper plates","party supplies"], sourcing: "1688: 圣诞餐具" },
+    { sku: "圣诞帽套装(6只)", skuEn: "Santa Hat Set 6 Pack", category: "apparel", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约50-55%", matchScore: 5, riskLevel: "低", riskNote: "派对刚需", keywords: ["santa hat","christmas hat","party hat"], sourcing: "1688: 圣诞帽" },
+    { sku: "驯鹿发箍套装", skuEn: "Reindeer Headband Set", category: "apparel", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约50-55%", matchScore: 5, riskLevel: "低", riskNote: "派对配件", keywords: ["reindeer headband","christmas accessory","party headband"], sourcing: "1688: 驯鹿发箍" },
+    { sku: "圣诞老人胡子道具套装", skuEn: "Santa Beard Prop Set", category: "apparel", costRange: "¥4-8", priceRange: "£5.99-7.99", margin: "约55-60%", matchScore: 5, riskLevel: "低", riskNote: "轻小件", keywords: ["santa beard","christmas prop","party accessory"], sourcing: "1688: 圣诞老人胡子" },
+    { sku: "圣诞主题门环装饰", skuEn: "Christmas Wreath", category: "decor", costRange: "¥10-20", priceRange: "£8.99-9.99", margin: "约40-45%", matchScore: 3, riskLevel: "低", riskNote: "体积大注意FBA", keywords: ["christmas wreath","door wreath","xmas decor"], sourcing: "1688: 圣诞门环" },
+    { sku: "圣诞日历盲盒(玩具)", skuEn: "Advent Calendar Toys", category: "gift", costRange: "¥10-18", priceRange: "£8.99-9.99", margin: "约40-50%", matchScore: 4, riskLevel: "中", riskNote: "儿童玩具安全认证", keywords: ["advent calendar","christmas countdown","toy calendar"], sourcing: "1688: 圣诞日历" },
+    { sku: "圣诞主题蜡烛套装", skuEn: "Christmas Candle Set", category: "home", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约45-50%", matchScore: 4, riskLevel: "中", riskNote: "蜡烛安全标签要求", keywords: ["christmas candles","scented candles","festive candle"], sourcing: "1688: 圣诞蜡烛" }
+  ],
+  validation: {
+    googleTrends: ["christmas decorations 2026","christmas gifts uk"],
+    amazonCheck: "BSR < 1500；全年最大消费节点",
+    sourcing: "1688搜索：圣诞装饰/礼品/派对",
+    riskFlags: ["⚠️最大节点需最早备货(T-55约10月底)","避免IP侵权(Disney等)","电子需UKCA","蜡烛/儿童玩具有安全要求"]
+  }
+},
+{
+  id: "boxing-week-2026",
+  name: "节礼周", nameEn: "Boxing Week (Boxing Day + NYE)", icon: "🎊",
+  date: "2026-12-26", month: 12, importance: "A", category: "activity",
+  themeColor: "#7c3aed",
+  products: [
+    { sku: "新年主题装饰套装", skuEn: "New Year Decoration Set", category: "decor", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约45-50%", matchScore: 4, riskLevel: "低", riskNote: "常规品类", keywords: ["new year decorations","2027 decor","nye party"], sourcing: "1688: 新年装饰" },
+    { sku: "派对popper套装", skuEn: "Party Poppers Set", category: "decor", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约50-55%", matchScore: 4, riskLevel: "中", riskNote: "烟花类产品安全认证", keywords: ["party poppers","new year","celebration"], sourcing: "1688: 派对popper" },
+    { sku: "新年主题眼镜道具", skuEn: "New Year Glasses Props", category: "apparel", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约60-70%", matchScore: 5, riskLevel: "低", riskNote: "轻小件", keywords: ["new year glasses","2027 glasses","party props"], sourcing: "1688: 新年眼镜" },
+    { sku: "清仓特价包装礼品", skuEn: "Clearance Gift Sets", category: "gift", costRange: "¥6-12", priceRange: "£6.99-8.99", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "消化圣诞余货", keywords: ["gift sets","sale items","clearance"], sourcing: "1688: 礼品套装" },
+    { sku: "2027新年倒计时日历牌", skuEn: "2027 New Year Countdown Calendar", category: "decor", costRange: "¥5-10", priceRange: "£6.49-8.49", margin: "约45-55%", matchScore: 4, riskLevel: "低", riskNote: "衔接新年主题", keywords: ["new year countdown","2027 calendar","nye decor","party calendar"], sourcing: "1688: 新年倒计时牌" },
+    { sku: "派对彩带喷花(安全型)", skuEn: "Party Streamers Spray Safe Type", category: "decor", costRange: "¥3-6", priceRange: "£5.99-7.99", margin: "约55-60%", matchScore: 4, riskLevel: "中", riskNote: "需安全认证；注意材质无毒", keywords: ["party streamers","spray string","nye party","celebration"], sourcing: "1688: 彩带喷花" },
+    { sku: "冬季保暖围巾(新年红)", skuEn: "Winter Scarf New Year Red", category: "apparel", costRange: "¥8-15", priceRange: "£7.99-9.99", margin: "约40-50%", matchScore: 4, riskLevel: "低", riskNote: "UK尺码；红色新年主题", keywords: ["red scarf","new year scarf","winter scarf","festive scarf"], sourcing: "1688: 红色围巾" }
+  ],
+  validation: {
+    googleTrends: ["boxing day sale","new year decorations"],
+    amazonCheck: "BSR < 5000；清仓+新年衔接",
+    sourcing: "1688搜索：新年装饰/派对用品",
+    riskFlags: ["烟花类需安全认证","主要消化圣诞库存"]
+  }
+}
+
+];
+
+// ============================================
+// State：localStorage 状态管理
+// ============================================
+const State = {
+  data: null,
+  load() {
+    const raw = localStorage.getItem(CONFIG.storageKey);
+    if (raw) {
+      try { this.data = JSON.parse(raw); }
+      catch (e) { console.warn("存储数据损坏，重置", e); this.init(); }
+    } else { this.init(); }
+    return this.data;
+  },
+  init() {
+    this.data = { version: "1.0", lastUpdated: new Date().toISOString(), festivals: {} };
+    this.save();
+  },
+  save() {
+    this.data.lastUpdated = new Date().toISOString();
+    try {
+      localStorage.setItem(CONFIG.storageKey, JSON.stringify(this.data));
+      this._saveError = false;
+    } catch (e) {
+      // 配额超限或隐私模式禁用存储：每会话仅提示一次，避免 oninput 高频写入时弹窗刷屏
+      if (!this._saveError) {
+        this._saveError = true;
+        console.warn("保存失败", e);
+        alert("⚠️ 浏览器存储已满或被禁用，进度无法保存。建议先导出备份，再清理浏览器存储。");
+      }
+    }
+  },
+  getFestival(id) {
+    if (!this.data.festivals[id]) {
+      this.data.festivals[id] = {
+        status: "none", logistics: CONFIG.defaultLogistics,
+        milestones: { selection: false, airArrival: false, truckShip: false, arrival: false, festival: false },
+        notes: "", selectedSkus: []
+      };
+    }
+    return this.data.festivals[id];
+  },
+  updateFestival(id, updates) {
+    Object.assign(this.getFestival(id), updates);
+    this.save();
+  },
+  toggleMilestone(id, mid) {
+    const f = this.getFestival(id);
+    f.milestones[mid] = !f.milestones[mid];
+    this.save();
+  },
+  toggleSku(id, sku) {
+    const f = this.getFestival(id);
+    const i = f.selectedSkus.indexOf(sku);
+    if (i >= 0) f.selectedSkus.splice(i, 1);
+    else f.selectedSkus.push(sku);
+    this.save();
+  },
+  export() { return JSON.stringify(this.data, null, 2); },
+  import(str) {
+    const p = JSON.parse(str);
+    if (!p.version || !p.festivals) throw new Error("文件格式不正确");
+    this.data = p; this.save();
+  },
+  reset() { localStorage.removeItem(CONFIG.storageKey); this.init(); }
+};
+
+// 当前筛选状态
+const Filter = {
+  category: "", month: "", urgency: "", status: "", search: "", statCardUrgency: ""
+};
+
+// ============================================
+// Utils：工具函数
+// ============================================
+const Utils = {
+  parseDate(str) {
+    // 兼容写法：拆分YYYY-MM-DD，避免旧引擎ISO解析问题
+    const parts = str.split("-").map(Number);
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  },
+  today() { const d = new Date(); d.setHours(0,0,0,0); return d; },
+  diffDays(a, b) { return Math.round((a - b) / 86400000); },
+  fmtMD(date) { return `${date.getMonth() + 1}/${date.getDate()}`; },
+  fmtYMD(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+  },
+  // 选品截止日 = 节日 - (leadTime + 14)
+  getSelectionDeadline(festivalDate, logistics) {
+    const mode = CONFIG.logisticsModes[logistics];
+    const d = new Date(this.parseDate(festivalDate));
+    d.setDate(d.getDate() - (mode.leadTime + 14));
+    return d;
+  },
+  // 5个里程碑日期：daysBefore = 节日前X天（正数）
+  // daysBeforeSource 引用物流方式属性（如 "leadTime+14"），否则用固定 daysBefore
+  getMilestoneDates(festival) {
+    const logistics = State.getFestival(festival.id).logistics;
+    const mode = CONFIG.logisticsModes[logistics];
+    return CONFIG.milestones.map(ms => {
+      // 解析 daysBeforeSource：如 "leadTime+14" → mode.leadTime + 14；"transit" → mode.transit
+      let daysBefore;
+      if (ms.daysBeforeSource) {
+        const expr = ms.daysBeforeSource;
+        if (expr.includes("+")) {
+          const [base, add] = expr.split("+");
+          daysBefore = mode[base] + parseInt(add);
+        } else {
+          daysBefore = mode[expr];
+        }
+      } else {
+        daysBefore = ms.daysBefore;
+      }
+      const d = new Date(this.parseDate(festival.date));
+      d.setDate(d.getDate() - daysBefore);
+      // 渲染时按当前物流方式替换 actions 里的占位符（{modeLabel}/{transit}/{leadTime}/{production}）
+      const actions = (ms.actions || "").replace(/\{modeLabel\}/g, mode.label)
+        .replace(/\{transit\}/g, mode.transit).replace(/\{leadTime\}/g, mode.leadTime)
+        .replace(/\{production\}/g, mode.production);
+      return { ...ms, actions, date: d, dateStr: this.fmtMD(d) };
+    });
+  },
+  getUrgency(festival) {
+    const festState = State.getFestival(festival.id);
+    const fDate = this.parseDate(festival.date);
+    const today = this.today();
+    if (fDate < today) return "past";
+    const deadline = this.getSelectionDeadline(festival.date, festState.logistics);
+    const days = this.diffDays(deadline, today);
+    if (days < 0) {
+      if (festState.milestones.selection) return "plan";
+      return "urgent";
+    } else if (days <= CONFIG.urgencyThresholds.week) return "week";
+    else if (days <= CONFIG.urgencyThresholds.month) return "month";
+    return "plan";
+  },
+  urgencyLabel(u) {
+    return ({ urgent:"🔴紧急", week:"🟠本周启动", month:"🟡本月备货", plan:"🟢规划中", past:"⚫已过" })[u] || u;
+  },
+  stars(s) { return "★".repeat(s) + "☆".repeat(5 - s); },
+  escape(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  },
+  // 防抖：停止调用 ms 毫秒后才执行，用于搜索框避免每次键入都全量重渲染
+  debounce(fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
+};
+
+// ============================================
+// Render：渲染函数
+// ============================================
+const Render = {
+  monthNav() {
+    document.getElementById("monthNav").innerHTML =
+      CONFIG.months.map(m => `<a href="#month-${m.num}">${m.label}</a>`).join("");
+  },
+
+  dashboard() {
+    const today = Utils.today();
+    const stats = { urgent: 0, week: 0, month: 0, plan: 0, past: 0 };
+    FESTIVALS.forEach(f => stats[Utils.getUrgency(f)]++);
+
+    // 最近需备货节点
+    const upcoming = FESTIVALS
+      .filter(f => Utils.getUrgency(f) !== "past")
+      .map(f => ({ fest: f, deadline: Utils.getSelectionDeadline(f.date, State.getFestival(f.id).logistics) }))
+      .sort((a, b) => a.deadline - b.deadline)[0];
+
+    const cd = document.getElementById("countdown");
+    if (upcoming) {
+      const days = Utils.diffDays(upcoming.deadline, today);
+      const u = Utils.getUrgency(upcoming.fest);
+      cd.innerHTML = `今日 <strong>${Utils.fmtYMD(today)}</strong> · 最近备货节点：
+        <strong>${upcoming.fest.icon} ${upcoming.fest.name}</strong>（${upcoming.fest.date}）
+        · 选品截止 <strong>${Utils.fmtYMD(upcoming.deadline)}</strong>
+        · <span class="badge ${u}">${Utils.urgencyLabel(u)}</span>`;
+    }
+
+    const cards = [
+      { key:"urgent", cls:"urgent", num:stats.urgent, label:"🔴 紧急（已过截止）" },
+      { key:"week",   cls:"week",   num:stats.week,   label:"🟠 本周必须启动" },
+      { key:"month",  cls:"month",  num:stats.month,  label:"🟡 本月需备货" },
+      { key:"plan",   cls:"plan",   num:stats.plan,   label:"🟢 规划观察中" }
+    ];
+    document.getElementById("statCards").innerHTML = cards.map(c =>
+      `<div class="stat-card ${c.cls} ${Filter.statCardUrgency === c.key ? "active" : ""}" onclick="Filter.statCardUrgency='${c.key}';Filter.search='';Filter.urgency='${c.key}';document.getElementById('filterSearch').value='';document.getElementById('filterUrgency').value='${c.key}';Interact.applyFilter();">
+        <div class="num">${c.num}</div>
+        <div class="label">${c.label}</div>
+      </div>`
+    ).join("");
+  },
+
+  main() {
+    const filtered = FESTIVALS.filter(f => {
+      const festState = State.getFestival(f.id);
+      const urgency = Utils.getUrgency(f);
+      if (Filter.category && !f.products.some(p => p.category === Filter.category)) return false;
+      if (Filter.month && f.month !== parseInt(Filter.month)) return false;
+      const effU = Filter.statCardUrgency || Filter.urgency;
+      if (effU && urgency !== effU) return false;
+      if (Filter.status && festState.status !== Filter.status) return false;
+      if (Filter.search) {
+        const q = Filter.search.toLowerCase();
+        const hay = (f.name + f.nameEn + f.icon +
+          f.products.map(p => p.sku + p.skuEn + p.keywords.join("")).join("")).toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    const mainEl = document.getElementById("main");
+    if (filtered.length === 0) {
+      mainEl.innerHTML = `<div class="empty-state">没有匹配的节日，试试调整筛选条件。🔍</div>`;
+      return;
+    }
+
+    const byMonth = {};
+    filtered.forEach(f => { (byMonth[f.month] = byMonth[f.month] || []).push(f); });
+
+    let html = "";
+    CONFIG.months.forEach(m => {
+      if (!byMonth[m.num]) return;
+      const fests = byMonth[m.num].sort((a, b) => new Date(a.date) - new Date(b.date));
+      html += `<section class="month-section" id="month-${m.num}">
+        <h2>${m.label} <span class="count">(${fests.length}个节点)</span></h2>
+        <div class="cards-grid">${fests.map(f => this.festivalCard(f)).join("")}</div>
+      </section>`;
+    });
+    mainEl.innerHTML = html;
+  },
+
+  festivalCard(f) {
+    const festState = State.getFestival(f.id);
+    const urgency = Utils.getUrgency(f);
+    const deadline = Utils.getSelectionDeadline(f.date, festState.logistics);
+    const days = Utils.diffDays(deadline, Utils.today());
+    const expanded = f.importance === "S" ? "expanded" : "";
+    const catLabel = ({ festival:"节日", activity:"活动", trend:"趋势" })[f.category] || f.category;
+
+    const header = `
+      <div class="card-header" tabindex="0" role="button" aria-expanded="${expanded ? "true" : "false"}" onclick="Interact.toggleCard('${f.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Interact.toggleCard('${f.id}')}">
+        <div>
+          <div class="card-title">
+            <span class="icon">${f.icon}</span>
+            <span>${f.name}</span>
+            <span class="name-en">${f.nameEn}</span>
+            ${f.importance === "S" ? '<span class="badge importance-S">S级</span>' : ""}
+            <span class="badge ${urgency}">${Utils.urgencyLabel(urgency)}</span>
+          </div>
+          <div class="card-meta">
+            ${f.date} · ${catLabel} | 选品截止 ${Utils.fmtYMD(deadline)}（${days >= 0 ? "剩" + days + "天" : "已过" + (-days) + "天"}）
+          </div>
+        </div>
+        <div class="card-arrow">${expanded ? "▼" : "▶"}</div>
+      </div>`;
+
+    const body = `<div class="card-body">
+      ${this.logisticsToggle(f.id, festState.logistics)}
+      ${this.timeline(f)}
+      ${this.products(f)}
+      ${this.validation(f)}
+      ${this.controls(f)}
+    </div>`;
+
+    return `<div class="festival-card ${expanded}" id="card-${f.id}" style="border-left-color:${f.themeColor}">${header}${body}</div>`;
+  },
+
+  logisticsToggle(id, logistics) {
+    const btns = LOGISTICS_OPTIONS.map(o =>
+      `<button class="${o.id === logistics ? "active" : ""}"
+        onclick="Interact.switchLogistics('${id}','${o.id}')">${o.icon} ${o.label}</button>`
+    ).join("");
+    return `<div class="card-controls"><label>物流方式：</label><div class="logistics-toggle">${btns}</div></div>`;
+  },
+
+  timeline(f) {
+    const festState = State.getFestival(f.id);
+    const ms = Utils.getMilestoneDates(f);
+    const nodes = ms.map(m => {
+      const done = festState.milestones[m.id];
+      return `<div class="timeline-node">
+        <div class="timeline-dot ${done ? "done" : ""}"
+          tabindex="0" role="button"
+          aria-label="${m.name} ${m.dateStr}${done ? '（已完成）' : '（未完成）'}"
+          onclick="Interact.toggleMilestone('${f.id}','${m.id}')"
+          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Interact.toggleMilestone('${f.id}','${m.id}')}"
+          title="${m.actions}"></div>
+        <div class="ms-name">${m.name}</div>
+        <div class="ms-date">${m.dateStr}</div>
+      </div>`;
+    }).join("");
+    const mode = CONFIG.logisticsModes[festState.logistics];
+    return `<div class="timeline">
+      <div style="font-size:12px;color:var(--text-muted)">
+        📅 备货时间线（${mode.label}，总提前期${mode.leadTime + 14}天）
+      </div>
+      <div class="timeline-track">${nodes}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px">
+        💡 策略：空运首批50件测款 + ${mode.label}大货同时下单。点击圆点标记完成。
+      </div>
+    </div>`;
+  },
+
+  products(f) {
+    const festState = State.getFestival(f.id);
+    const cats = ["decor", "gift", "apparel", "home"];
+    const tabs = `<div class="product-cat-tabs">
+      <div class="product-cat-tab active" onclick="Interact.filterProductCat('${f.id}','',this)">${f.products.length} 全部</div>
+      ${cats.filter(c => f.products.some(p => p.category === c)).map(c => {
+        const cnt = f.products.filter(p => p.category === c).length;
+        return `<div class="product-cat-tab" onclick="Interact.filterProductCat('${f.id}','${c}',this)">${CONFIG.categories[c].label} ${cnt}</div>`;
+      }).join("")}
+    </div>`;
+    const rows = f.products.map(p => {
+      const sel = festState.selectedSkus.includes(p.sku);
+      const riskCls = p.riskLevel === "低" ? "risk-low" : p.riskLevel === "中" ? "risk-mid" : "risk-high";
+      return `<tr class="prod-row" data-cat="${p.category}">
+        <td><input type="checkbox" ${sel ? "checked" : ""} onchange="Interact.toggleSku('${f.id}','${Utils.escape(p.sku)}')" title="标记要做"></td>
+        <td><strong>${p.sku}</strong><br><span style="color:var(--text-muted);font-size:11px">${p.skuEn}</span></td>
+        <td>${p.costRange}</td>
+        <td><strong>${p.priceRange}</strong></td>
+        <td style="color:var(--text-muted)">${p.margin}</td>
+        <td><span class="stars">${Utils.stars(p.matchScore)}</span></td>
+        <td><span class="risk ${riskCls}" title="${Utils.escape(p.riskNote)}">${p.riskLevel}</span></td>
+      </tr>`;
+    }).join("");
+    return `<div class="products-section">
+      <h4>🛒 选品清单（${f.products.length}个SKU建议）</h4>
+      ${tabs}
+      <div class="product-table-wrap"><table class="product-table">
+        <thead><tr><th></th><th>SKU</th><th>1688拿货</th><th>建议售价</th><th>毛利率</th><th>匹配度</th><th>风险</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
+  },
+
+  validation(f) {
+    const v = f.validation || {};
+    return `<div class="validation-section">
+      <h4>🔍 验证指引（数据依据）</h4>
+      <ul>
+        <li><strong>Google Trends：</strong>${(v.googleTrends || []).join(" / ")}</li>
+        <li><strong>亚马逊验证：</strong>${Utils.escape(v.amazonCheck || "")}</li>
+        <li><strong>1688拿货：</strong>${Utils.escape(v.sourcing || "")}</li>
+      </ul>
+      ${v.riskFlags && v.riskFlags.length ? `<div style="margin-top:6px;color:var(--urgent)"><strong>⚠️ 风险提示：</strong>${v.riskFlags.map(r => Utils.escape(r)).join("；")}</div>` : ""}
+    </div>`;
+  },
+
+  controls(f) {
+    const festState = State.getFestival(f.id);
+    const opts = [
+      { v:"none", l:"未启动" }, { v:"selection", l:"选品中" }, { v:"ordered", l:"已下单" },
+      { v:"arrived", l:"已到仓" }, { v:"listed", l:"已上架" }
+    ];
+    return `<div class="card-controls" style="margin-top:8px">
+      <label>状态：</label>
+      <select onchange="Interact.setStatus('${f.id}',this.value)">
+        ${opts.map(o => `<option value="${o.v}" ${festState.status === o.v ? "selected" : ""}>${o.l}</option>`).join("")}
+      </select>
+    </div>
+    <div>
+      <label style="font-size:12px;color:var(--text-muted)">📝 备注（店铺分布/供应商等）：</label>
+      <textarea class="notes-area" placeholder="如：A店计划上架8款，B店5款；供应商：义乌XX"
+        oninput="Interact.setNotes('${f.id}',this.value)">${Utils.escape(festState.notes)}</textarea>
+    </div>`;
+  }
+};
+
+// ============================================
+// Interact：交互绑定
+// ============================================
+const Interact = {
+  toggleCard(id) {
+    const card = document.getElementById("card-" + id);
+    if (card) {
+      card.classList.toggle("expanded");
+      const isExpanded = card.classList.contains("expanded");
+      const header = card.querySelector(".card-header");
+      if (header) header.setAttribute("aria-expanded", isExpanded ? "true" : "false");
+      const arrow = card.querySelector(".card-arrow");
+      if (arrow) arrow.textContent = isExpanded ? "▼" : "▶";
+    }
+  },
+  applyFilter() { Render.main(); },
+  resetFilter() {
+    Filter.category = ""; Filter.month = ""; Filter.urgency = "";
+    Filter.status = ""; Filter.search = ""; Filter.statCardUrgency = "";
+    document.getElementById("filterCategory").value = "";
+    document.getElementById("filterMonth").value = "";
+    document.getElementById("filterUrgency").value = "";
+    document.getElementById("filterStatus").value = "";
+    document.getElementById("filterSearch").value = "";
+    Render.main();
+  },
+  switchLogistics(id, logistics) {
+    State.updateFestival(id, { logistics });
+    Render.main(); Render.dashboard();
+  },
+  toggleMilestone(id, mid) {
+    State.toggleMilestone(id, mid);
+    Render.main(); Render.dashboard();
+  },
+  toggleSku(id, sku) { State.toggleSku(id, sku); },
+  setStatus(id, status) { State.updateFestival(id, { status }); Render.dashboard(); },
+  setNotes(id, notes) { State.updateFestival(id, { notes }); },
+  filterProductCat(id, cat, el) {
+    const card = document.getElementById("card-" + id);
+    if (!card) return;
+    card.querySelectorAll(".product-cat-tab").forEach(t => t.classList.remove("active"));
+    el.classList.add("active");
+    card.querySelectorAll(".prod-row").forEach(row => {
+      row.classList.toggle("hidden", cat && row.dataset.cat !== cat);
+    });
+  }
+};
+
+// ============================================
+// 筛选栏事件绑定
+// ============================================
+function bindFilters() {
+  document.getElementById("filterCategory").addEventListener("change", e => {
+    Filter.category = e.target.value; Filter.statCardUrgency = ""; Render.main();
+  });
+  document.getElementById("filterMonth").addEventListener("change", e => {
+    Filter.month = e.target.value; Render.main();
+  });
+  document.getElementById("filterUrgency").addEventListener("change", e => {
+    Filter.urgency = e.target.value; Filter.statCardUrgency = ""; Render.main();
+  });
+  document.getElementById("filterStatus").addEventListener("change", e => {
+    Filter.status = e.target.value; Render.main();
+  });
+  const debouncedSearch = Utils.debounce(v => { Filter.search = v; Render.main(); }, 180);
+  document.getElementById("filterSearch").addEventListener("input", e => {
+    debouncedSearch(e.target.value);
+  });
+  document.getElementById("resetFilter").addEventListener("click", () => Interact.resetFilter());
+}
+
+// ============================================
+// 导入/导出/重置
+// ============================================
+function exportData() {
+  const blob = new Blob([State.export()], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `uk-festival-backup-${Utils.fmtYMD(new Date())}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      State.import(e.target.result);
+      alert("✅ 导入成功！");
+      Render.dashboard(); Render.main();
+    } catch (err) { alert("❌ 导入失败：" + err.message); }
+  };
+  reader.readAsText(file);
+  event.target.value = "";
+}
+function resetAllProgress() {
+  if (!confirm("⚠️ 确定清除所有备货进度吗？此操作不可恢复！\n\n建议先点击\"导出备份\"保存当前数据。")) return;
+  if (!confirm("再次确认：真的要清除所有进度？")) return;
+  State.reset();
+  Render.dashboard(); Render.main();
+  alert("已清除所有进度。");
+}
+
+// 回到顶部按钮显隐
+window.addEventListener("scroll", () => {
+  document.getElementById("backToTop").classList.toggle("show", window.scrollY > 400);
+});
+
+// 动态测量 header 高度，避免标题换行时筛选栏吸顶错位
+function measureHeader() {
+  const h = document.querySelector(".header");
+  if (h) document.documentElement.style.setProperty("--header-h", h.offsetHeight + "px");
+}
+window.addEventListener("resize", measureHeader);
+
+// ============================================
+// 初始化
+// ============================================
+State.load();
+Render.monthNav();
+Render.dashboard();
+Render.main();
+bindFilters();
+measureHeader();
+</script>
+
+</body>
+</html>
