@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>UK节日选品备货决策工具</title>
+<title>UK节日/活动选品工具</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>📅</text></svg>">
 <style>
 :root {
   --bg: #f8fafc;
@@ -169,7 +170,7 @@ body {
 }
 .product-cat-tab.active { background: var(--accent); color: white; border-color: var(--accent); }
 .product-table-wrap { overflow-x: auto; }
-.product-table { width: 100%; font-size: 12px; border-collapse: collapse; min-width: 500px; }
+.product-table { width: 100%; font-size: 12px; border-collapse: collapse; min-width: 700px; }
 .product-table th {
   text-align: left; padding: 6px 8px; background: var(--bg);
   color: var(--text-muted); font-weight: 600; font-size: 11px;
@@ -181,6 +182,18 @@ body {
 .risk-low { background: #f0fdf4; color: var(--risk-low); }
 .risk-mid { background: #fff7ed; color: var(--risk-mid); }
 .risk-high { background: #fef2f2; color: var(--risk-high); }
+
+/* 亚马逊搜索按钮 */
+.amazon-kw {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 1px 6px; margin: 1px 2px; border-radius: 10px;
+  font-size: 10px; background: #fff7ed; color: #ea580c;
+  border: 1px solid #fed7aa; text-decoration: none; white-space: nowrap;
+  transition: all 0.15s; cursor: pointer;
+}
+.amazon-kw:hover { background: #ffedd5; border-color: #fb923c; }
+.amazon-kw .amz-icon { font-size: 10px; }
+.kw-cell { max-width: 200px; }
 
 /* 验证指引 */
 .validation-section {
@@ -253,7 +266,7 @@ body {
 <header class="header">
   <div class="header-inner">
     <div class="header-title">
-      🇬🇧 UK节日选品备货决策工具
+      📅 UK节日/活动选品工具
       <small>2026年7月 - 12月</small>
     </div>
     <nav class="month-nav" id="monthNav"></nav>
@@ -1193,13 +1206,14 @@ const Render = {
         <td style="color:var(--text-muted)">${p.margin}</td>
         <td><span class="stars">${Utils.stars(p.matchScore)}</span></td>
         <td><span class="risk ${riskCls}" title="${Utils.escape(p.riskNote)}">${p.riskLevel}</span></td>
+        <td class="kw-cell">${p.keywords.map(kw => `<a class="amazon-kw" href="https://www.amazon.co.uk/s?k=${encodeURIComponent(kw)}" target="_blank" rel="noopener" title="在亚马逊UK搜索: ${Utils.escape(kw)}"><span class="amz-icon">🔍</span>${Utils.escape(kw)}</a>`).join("")}</td>
       </tr>`;
     }).join("");
     return `<div class="products-section">
       <h4>🛒 选品清单（${f.products.length}个SKU建议）</h4>
       ${tabs}
       <div class="product-table-wrap"><table class="product-table">
-        <thead><tr><th></th><th>SKU</th><th>1688拿货</th><th>建议售价</th><th>毛利率</th><th>匹配度</th><th>风险</th></tr></thead>
+        <thead><tr><th></th><th>SKU</th><th>1688拿货</th><th>建议售价</th><th>毛利率</th><th>匹配度</th><th>风险</th><th>关键词（点击搜亚马逊）</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>
     </div>`;
@@ -1207,10 +1221,13 @@ const Render = {
 
   validation(f) {
     const v = f.validation || {};
+    const trendLinks = (v.googleTrends || []).map(kw =>
+      `<a class="amazon-kw" href="https://www.amazon.co.uk/s?k=${encodeURIComponent(kw)}" target="_blank" rel="noopener" title="在亚马逊UK搜索: ${Utils.escape(kw)}"><span class="amz-icon">🔍</span>${Utils.escape(kw)}</a>`
+    ).join(" ");
     return `<div class="validation-section">
       <h4>🔍 验证指引（数据依据）</h4>
       <ul>
-        <li><strong>Google Trends：</strong>${(v.googleTrends || []).join(" / ")}</li>
+        <li><strong>Google Trends：</strong>${trendLinks}</li>
         <li><strong>亚马逊验证：</strong>${Utils.escape(v.amazonCheck || "")}</li>
         <li><strong>1688拿货：</strong>${Utils.escape(v.sourcing || "")}</li>
       </ul>
@@ -1266,11 +1283,34 @@ const Interact = {
   },
   switchLogistics(id, logistics) {
     State.updateFestival(id, { logistics });
-    Render.main(); Render.dashboard();
+    // 只更新当前卡片内容，不重绘整个页面，避免卡片关闭
+    const card = document.getElementById("card-" + id);
+    if (card) {
+      const wasExpanded = card.classList.contains("expanded");
+      const festState = State.getFestival(id);
+      const f = FESTIVALS.find(f => f.id === id);
+      if (f) {
+        card.outerHTML = Render.festivalCard(f);
+        const newCard = document.getElementById("card-" + id);
+        if (newCard && wasExpanded) newCard.classList.add("expanded");
+      }
+    }
+    Render.dashboard();
   },
   toggleMilestone(id, mid) {
     State.toggleMilestone(id, mid);
-    Render.main(); Render.dashboard();
+    // 只更新当前卡片内容，不重绘整个页面，避免卡片关闭
+    const card = document.getElementById("card-" + id);
+    if (card) {
+      const wasExpanded = card.classList.contains("expanded");
+      const f = FESTIVALS.find(f => f.id === id);
+      if (f) {
+        card.outerHTML = Render.festivalCard(f);
+        const newCard = document.getElementById("card-" + id);
+        if (newCard && wasExpanded) newCard.classList.add("expanded");
+      }
+    }
+    Render.dashboard();
   },
   toggleSku(id, sku) { State.toggleSku(id, sku); },
   setStatus(id, status) { State.updateFestival(id, { status }); Render.dashboard(); },
