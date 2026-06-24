@@ -238,6 +238,38 @@ body {
 .footer-actions button:hover { background: var(--bg); }
 .footer-actions button.danger { color: var(--urgent); border-color: var(--urgent); }
 .footer-actions button.danger:hover { background: #fef2f2; }
+.footer-actions button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+.footer-actions button.primary:hover { background: var(--accent-hover); }
+
+/* 同步面板 */
+.sync-panel {
+  background: #f0f9ff; border: 1px solid #bae6fd; border-radius: var(--radius);
+  padding: 16px; margin: 16px 0;
+}
+.sync-panel h4 { font-size: 14px; color: var(--accent); margin-bottom: 8px; }
+.sync-panel .sync-row {
+  display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;
+}
+.sync-panel label { font-size: 12px; color: var(--text-muted); min-width: 80px; }
+.sync-panel input[type="text"], .sync-panel input[type="password"] {
+  flex: 1; padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px;
+  font-size: 12px; min-width: 200px;
+}
+.sync-panel .sync-status {
+  font-size: 12px; padding: 6px 10px; border-radius: 4px; margin-top: 8px;
+}
+.sync-panel .sync-status.success { background: #f0fdf4; color: #16a34a; }
+.sync-panel .sync-status.error { background: #fef2f2; color: #ef4444; }
+.sync-panel .sync-status.info { background: #eff6ff; color: #3b82f6; }
+.sync-panel .sync-actions { display: flex; gap: 8px; margin-top: 10px; }
+.sync-panel .sync-actions button {
+  padding: 6px 16px; border: 1px solid var(--border); border-radius: 4px;
+  cursor: pointer; font-size: 13px;
+}
+.sync-panel .sync-actions button.push { background: var(--accent); color: white; border-color: var(--accent); }
+.sync-panel .sync-actions button.pull { background: #10b981; color: white; border-color: #10b981; }
+.sync-panel .sync-actions button:hover { opacity: 0.9; }
+.sync-tip { font-size: 11px; color: var(--text-muted); margin-top: 6px; line-height: 1.5; }
 
 /* 回到顶部 */
 .back-to-top {
@@ -351,10 +383,40 @@ body {
   <div class="disclaimer">
     <strong>⚠️ 数据免责声明：</strong>本工具的SKU建议、售价区间、毛利率为基于行业经验的参考值，非实时销量数据。请通过 Google Trends、亚马逊BSR、Keepa 等工具验证后再决策。拿货成本以1688实际询价为准。
   </div>
+
+  <!-- 团队数据同步 -->
+  <div class="sync-panel">
+    <h4>☁️ 团队数据同步（GitHub Gist）</h4>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">两人共享同一份进度数据。首次使用需配置 GitHub Token 和 Gist ID。</p>
+    <div class="sync-row">
+      <label>GitHub Token</label>
+      <input type="password" id="syncToken" placeholder="ghp_xxxxxxxxxxxx（需 gist 权限）">
+    </div>
+    <div class="sync-row">
+      <label>Gist ID</label>
+      <input type="text" id="syncGistId" placeholder="如：abc123def456（从 Gist URL 获取）">
+    </div>
+    <div class="sync-actions">
+      <button class="push" onclick="syncPush()">⬆️ 推送（保存到云端）</button>
+      <button class="pull" onclick="syncPull()">⬇️ 拉取（加载云端数据）</button>
+      <button onclick="syncCreateGist()">🆕 创建新 Gist</button>
+      <button onclick="saveSyncConfig()">💾 保存配置</button>
+    </div>
+    <div id="syncStatus"></div>
+    <div class="sync-tip">
+      <strong>配置步骤：</strong><br>
+      1. 访问 <a href="https://github.com/settings/tokens" target="_blank">GitHub Settings → Tokens</a>，创建 Token（勾选 <code>gist</code> 权限）<br>
+      2. 一方点击"创建新 Gist"生成共享 Gist，把 Gist ID 发给对方<br>
+      3. 双方填入相同的 Token 和 Gist ID，点"保存配置"<br>
+      4. 之后点"推送"上传进度，点"拉取"获取对方的最新进度
+    </div>
+  </div>
+
   <div class="footer-actions">
     <button onclick="exportData()">📤 导出备份</button>
     <button onclick="document.getElementById('importFile').click()">📥 导入恢复</button>
     <input type="file" id="importFile" accept=".json" class="hidden" onchange="importData(event)">
+    <button onclick="exportExcel()">📊 导出Excel</button>
     <button class="danger" onclick="resetAllProgress()">🗑 清除所有进度</button>
   </div>
 </footer>
@@ -2217,6 +2279,136 @@ function resetAllProgress() {
   alert("已清除所有进度。");
 }
 
+// ============================================
+// GitHub Gist 同步
+// ============================================
+const SYNC_CONFIG_KEY = "uk_festival_sync_config";
+
+function getSyncConfig() {
+  try {
+    return JSON.parse(localStorage.getItem(SYNC_CONFIG_KEY)) || {};
+  } catch { return {}; }
+}
+function saveSyncConfig() {
+  const token = document.getElementById("syncToken").value.trim();
+  const gistId = document.getElementById("syncGistId").value.trim();
+  localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify({ token, gistId }));
+  showSyncStatus("✅ 配置已保存", "success");
+}
+function loadSyncConfig() {
+  const cfg = getSyncConfig();
+  if (cfg.token) document.getElementById("syncToken").value = cfg.token;
+  if (cfg.gistId) document.getElementById("syncGistId").value = cfg.gistId;
+}
+function showSyncStatus(msg, type) {
+  const el = document.getElementById("syncStatus");
+  el.className = "sync-status " + type;
+  el.textContent = msg;
+}
+
+async function gistAPI(method, path, body, token) {
+  const resp = await fetch("https://api.github.com" + path, {
+    method,
+    headers: {
+      "Authorization": "Bearer " + token,
+      "Accept": "application/vnd.github+json",
+      "Content-Type": "application/json"
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.message || "GitHub API 请求失败 (" + resp.status + ")");
+  }
+  return resp.json();
+}
+
+async function syncCreateGist() {
+  const token = document.getElementById("syncToken").value.trim();
+  if (!token) { showSyncStatus("❌ 请先填入 GitHub Token", "error"); return; }
+  showSyncStatus("⏳ 正在创建 Gist...", "info");
+  try {
+    const data = State.export();
+    const result = await gistAPI("POST", "/gists", {
+      description: "UK Festival Planner - Team Sync Data",
+      public: false,
+      files: {
+        "uk-festival-data.json": { content: data }
+      }
+    }, token);
+    document.getElementById("syncGistId").value = result.id;
+    saveSyncConfig();
+    showSyncStatus("✅ Gist 创建成功！ID: " + result.id + "，请把这个 ID 发给你的搭档。", "success");
+  } catch (err) {
+    showSyncStatus("❌ 创建失败：" + err.message, "error");
+  }
+}
+
+async function syncPush() {
+  const cfg = getSyncConfig();
+  if (!cfg.token || !cfg.gistId) { showSyncStatus("❌ 请先配置 Token 和 Gist ID", "error"); return; }
+  showSyncStatus("⏳ 正在推送到云端...", "info");
+  try {
+    const data = State.export();
+    await gistAPI("PATCH", "/gists/" + cfg.gistId, {
+      files: {
+        "uk-festival-data.json": { content: data }
+      }
+    }, cfg.token);
+    const now = new Date().toLocaleString("zh-CN");
+    showSyncStatus("✅ 推送成功！" + now, "success");
+  } catch (err) {
+    showSyncStatus("❌ 推送失败：" + err.message, "error");
+  }
+}
+
+async function syncPull() {
+  const cfg = getSyncConfig();
+  if (!cfg.token || !cfg.gistId) { showSyncStatus("❌ 请先配置 Token 和 Gist ID", "error"); return; }
+  showSyncStatus("⏳ 正在从云端拉取...", "info");
+  try {
+    const result = await gistAPI("GET", "/gists/" + cfg.gistId, null, cfg.token);
+    const file = result.files["uk-festival-data.json"];
+    if (!file) throw new Error("Gist 中未找到数据文件");
+    State.import(file.content);
+    Render.dashboard(); Render.main();
+    const now = new Date().toLocaleString("zh-CN");
+    showSyncStatus("✅ 拉取成功！数据已更新。" + now, "success");
+  } catch (err) {
+    showSyncStatus("❌ 拉取失败：" + err.message, "error");
+  }
+}
+
+// ============================================
+// 导出 Excel（CSV 格式）
+// ============================================
+function exportExcel() {
+  const rows = [["月份","节日","日期","重要性","品类","紧急度","状态","SKU","英文SKU","品类","成本","售价","毛利率","匹配度","风险等级","风险说明","关键词"]];
+  FESTIVALS.forEach(f => {
+    const urgency = Utils.getUrgency(f);
+    const festState = State.getFestival(f.id);
+    const urgencyLabel = Utils.urgencyLabel(urgency);
+    const statusLabel = ({none:"未启动",selection:"选品中",ordered:"已下单",arrived:"已到仓",listed:"已上架"})[festState.status] || festState.status;
+    f.products.forEach(p => {
+      rows.push([
+        f.month + "月", f.name, f.date, f.importance, f.category,
+        urgencyLabel, statusLabel,
+        p.sku, p.skuEn, p.category, p.costRange, p.priceRange,
+        p.margin, p.matchScore + "/5", p.riskLevel, p.riskNote,
+        (p.keywords || []).join("; ")
+      ]);
+    });
+  });
+  const csv = "\uFEFF" + rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `uk-festival-skus-${Utils.fmtYMD(new Date())}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // 回到顶部按钮显隐
 window.addEventListener("scroll", () => {
   document.getElementById("backToTop").classList.toggle("show", window.scrollY > 400);
@@ -2238,6 +2430,7 @@ Render.dashboard();
 Render.main();
 bindFilters();
 measureHeader();
+loadSyncConfig();
 </script>
 
 </body>
